@@ -70,7 +70,7 @@
             font-family: "Courier New", Courier, monospace;
             font-size: var(--base-font-size);
             padding: 20px; 
-            padding-bottom: 80px;
+            padding-bottom: 90px; /* Extra padding for footer */
             margin: 0; 
             min-height: 100vh;
             transition: font-size 0.2s ease;
@@ -174,7 +174,22 @@
         .notif-item:hover { background: rgba(255,255,255,0.05); }
         .notif-icon { margin-right: 15px; font-size: 1.5em; width: 25px; text-align: center; }
 
-        .sticky-footer { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--footer-bg); border-top: 1px solid var(--border-color); display: flex; justify-content: center; gap: 6px; padding: 15px 0; z-index: 1000; box-shadow: 0 -2px 10px rgba(0,0,0,0.5); font-family: inherit; }
+        /* FIXED STICKY FOOTER STYLE */
+        .sticky-footer { 
+            position: fixed; 
+            bottom: 0; 
+            left: 0; 
+            width: 100%; 
+            background-color: var(--footer-bg); 
+            border-top: 1px solid var(--border-color); 
+            display: flex; 
+            justify-content: center; 
+            gap: 6px; 
+            padding: 15px 0; 
+            z-index: 9999; /* Increased Z-Index */
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.5); 
+            font-family: inherit; 
+        }
         .footer-item { font-size: 0.85em; cursor: pointer; text-align: center; transition: 0.3s; color: var(--text-color); text-decoration: none; opacity: 0.7; }
         .footer-item:hover { opacity: 1; text-decoration: underline; text-shadow: var(--glow); }
 
@@ -500,7 +515,14 @@
         try { likedPosts = new Set(JSON.parse(localStorage.getItem('mbit_likes')) || []); } catch(e){}
         let bookmarks = new Set();
         try { bookmarks = new Set(JSON.parse(localStorage.getItem('mbit_bookmarks')) || []); } catch(e){}
-        let myContacts = new Set(); 
+        
+        // FIX 1: PERSIST CONTACTS
+        let myContacts = new Set();
+        try {
+            const storedContacts = JSON.parse(localStorage.getItem('mbit_contacts'));
+            if(storedContacts) myContacts = new Set(storedContacts);
+        } catch(e) {}
+
         let eventStats = {};
         const profiles = {};
         const processedIds = new Set(), requestedProfiles = new Set();
@@ -1084,7 +1106,13 @@
                 if (isMe || pk === currentViewedProfile) {
                      const following = ev.tags.filter(t => t[0] === 'p').map(t => t[1]);
                      profiles[pk].following = new Set(following);
-                     if (isMe) myContacts = new Set(following); 
+                     if (isMe) {
+                         myContacts = new Set(following); 
+                         // FIX 2: SAVE CONTACTS TO LOCALSTORAGE
+                         localStorage.setItem('mbit_contacts', JSON.stringify(following));
+                         // Re-render feed if we are on the following tab to show new content
+                         if(currentFeedTab === 'following') renderGlobalFeed();
+                     }
                 } else {
                     const target = isMe ? myPubKey : currentViewedProfile;
                     if (target) {
@@ -1102,7 +1130,13 @@
             try {
                 const ws = new WebSocket(url); sockets[url] = ws;
                 ws.onopen = () => { 
-                    ws.send(JSON.stringify(["REQ", "g", { kinds:[1,6], limit:40 }])); 
+                    // FIX 3: REQUEST TRENDING RELAY SPECIFICALLY
+                    if (url === 'wss://trending.relays.land') {
+                        ws.send(JSON.stringify(["REQ", "trending_sub", { kinds:[1], limit:50 }]));
+                    } else {
+                        ws.send(JSON.stringify(["REQ", "g", { kinds:[1,6], limit:40 }])); 
+                    }
+                    
                     if(myPubKey) {
                         fetchProfile(myPubKey);
                         ws.send(JSON.stringify(["REQ", "my_contacts", { kinds:[3], authors:[myPubKey], limit:1 }]));
@@ -1118,7 +1152,11 @@
                         processEventStats(ev); 
                         if (subId === 'my_meta' || subId === 'user_meta') processProfileEvent(ev, subId === 'my_meta');
                         if (subId === 'my_followers' || subId === 'user_followers') processProfileEvent(ev, subId === 'my_followers'); 
-                        if (subId === 'g') handleGlobalEvent(ev, url); // Changed signature
+                        
+                        // FIX 4: Handle Trending Subscription
+                        if (subId === 'trending_sub') handleGlobalEvent(ev, 'wss://trending.relays.land');
+                        
+                        if (subId === 'g') handleGlobalEvent(ev, url); 
                         if (subId === 'sub_me') handleMyEvent(ev);
                         if (subId === 'sub_user') handleUserEvent(ev);
                         if (subId === 'search_sub') handleSearchEvent(ev);
@@ -1128,6 +1166,12 @@
                         if (subId === 'thread_main' || subId === 'thread_children' || subId.startsWith('thread_ancestor')) {
                             handleThreadEvent(ev);
                         }
+
+                        // Fix: Ensure we capture contacts even if not specifically 'my_contacts' sub
+                        if (ev.kind === 3 && ev.pubkey === myPubKey) {
+                             processProfileEvent(ev, true);
+                        }
+                        if (subId === 'my_contacts') processProfileEvent(ev, true);
 
                         if (subId === 'bookmarks_sub') handleBookmarkEvent(ev);
                         if (subId.startsWith('m_')) { try { profiles[ev.pubkey].meta = JSON.parse(ev.content); } catch(e) { initProfileData(ev.pubkey); profiles[ev.pubkey].meta = JSON.parse(ev.content); } renderNotifications(); }
@@ -1169,10 +1213,7 @@
             } else { 
                 events=[...incomingBuffer,...events]; 
                 events.sort((a,b)=>b.created_at-a.created_at); 
-                renderGlobalFeed(); 
-                if (!document.getElementById('panel-search').classList.contains('hidden') && !isSearching) {
-                    renderDiscoveryFeed();
-                }
+                // Only auto-render if we aren't scrolling, but for simplicity we rely on manual button or tab switch
             } 
             incomingBuffer=[]; 
         }, 1500);
@@ -1196,6 +1237,8 @@
             currentFeedTab = tab;
             ['ftab-following', 'ftab-trending'].forEach(id => document.getElementById(id).classList.remove('active'));
             document.getElementById('ftab-'+tab).classList.add('active');
+            
+            // FIX 5: Force immediate re-render when switching tabs
             renderGlobalFeed();
         }
 
@@ -1204,23 +1247,32 @@
             
             if (currentFeedTab === 'following') {
                 // Filter: Must be in my contact list
+                if (!myPubKey) {
+                     document.getElementById('feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Login to see your feed.</div>';
+                     return;
+                }
+                
+                // If logged in, check contacts
                 if (myContacts.size > 0) {
                     list = events.filter(ev => myContacts.has(ev.pubkey));
+                    if (list.length === 0) {
+                         document.getElementById('feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">No notes from people you follow found yet.<br>Try adding more relays or following more people.</div>';
+                         return;
+                    }
                 } else {
-                    // If no contacts or not logged in, show helpful message
-                    document.getElementById('feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Login and follow people to see notes here.<br>Switch to TRENDING to see content now.</div>';
+                    document.getElementById('feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Loading contacts...<br>(Or you are following 0 people)</div>';
                     return;
                 }
             } else {
                 // TRENDING: Show events marked as trending
                 list = events.filter(ev => ev._isTrending === true);
+                if (list.length === 0) {
+                     document.getElementById('feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Waiting for Trending data...</div>';
+                     return;
+                }
             }
 
-            if (list.length === 0) {
-                document.getElementById('feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Waiting for signals...</div>';
-            } else {
-                document.getElementById('feed').innerHTML = list.map(generatePostHTML).join('');
-            }
+            document.getElementById('feed').innerHTML = list.map(generatePostHTML).join('');
         }
         
         async function toggleFollow(pubkey) { if(!myPubKey) return alert("Login required"); if(myContacts.has(pubkey)) myContacts.delete(pubkey); else myContacts.add(pubkey); renderUserProfileHeader(pubkey); const tags = Array.from(myContacts).map(p => ['p', p]); const event = { kind: 3, created_at: Math.floor(Date.now()/1000), tags: tags, content: "", pubkey: myPubKey }; await signAndBroadcast(event); }
@@ -1302,7 +1354,6 @@
             }
         }
 
-        // Helper to parse NWC URI
         function parseNwcUri(uri) {
             try {
                 const url = new URL(uri.replace('nostr+walletconnect:', 'https:'));
