@@ -103,7 +103,7 @@
         button.danger { background: #ff4141; color: white; }
         button.secondary { background: var(--post-border); color: var(--text-color); border: 1px solid var(--border-color); }
         
-        .relay-item { display: flex; align-items: center; justify-content: space-between; background: var(--input-bg); border: 1px solid var(--post-border); padding: 8px; margin-bottom: 5px; gap: 10px; }
+        .relay-item { display: flex; align-items: center; justify-content: space-between; background: var(--input-bg); border: 1px solid var(--post-border); padding: 8px; margin-bottom: 5px; gap: 10px; color: var(--text-color); }
         .relay-content { display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex-grow: 1; }
         .relay-url { font-size: 0.8em; margin-left: 10px; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
 
@@ -445,8 +445,11 @@
         
         let savedRelays;
         try {
-            savedRelays = JSON.parse(localStorage.getItem('mbit_relays')) || defaultRelays;
-            // Force add trending relay if missing
+            savedRelays = JSON.parse(localStorage.getItem('mbit_relays'));
+            if (!Array.isArray(savedRelays) || savedRelays.length === 0) {
+                savedRelays = defaultRelays;
+            }
+            // Force add trending relay if missing from existing list
             if (!savedRelays.includes('wss://trending.relays.land')) {
                 savedRelays.push('wss://trending.relays.land');
                 localStorage.setItem('mbit_relays', JSON.stringify(savedRelays));
@@ -513,6 +516,7 @@
         document.getElementById('nsfw-toggle').checked = filterSettings.hideNsfw;
         renderFilterList();
         updateNwcStatus();
+        renderRelays(); // Render relays immediately!
 
         function goHome() {
             ['panel-relays', 'panel-identity', 'panel-my-profile', 'panel-user-profile', 'panel-settings', 'panel-search', 'panel-notifications', 'panel-thread', 'panel-bookmarks'].forEach(p => document.getElementById(p).classList.add('hidden'));
@@ -534,25 +538,52 @@
             currentThreadId = null;
         }
 
+        function renderRelays() { 
+            const list = document.getElementById('relay-list');
+            if (!list) return;
+            list.innerHTML = savedRelays.map(url => { 
+                const isOpen = sockets[url] && sockets[url].readyState === 1; 
+                return `<div class="relay-item"><div class="relay-content"><span style="color:${isOpen?'#00FF41':'red'}; font-weight:bold; margin-right:5px;">${isOpen?'#ON':'#OFF'}</span><span class="relay-url" title="${url}">${url}</span></div><button class="small danger" style="width: 30px; flex-shrink: 0;" onclick="removeRelay('${url}')">X</button></div>`; 
+            }).join(''); 
+        }
+
+        function addRelay() { 
+            let url = document.getElementById('new-relay').value.trim(); 
+            if(url){ 
+                if(!url.startsWith('wss://')) url = 'wss://' + url; 
+                savedRelays.push(url); 
+                localStorage.setItem('mbit_relays', JSON.stringify(savedRelays)); 
+                connectToRelay(url); 
+                document.getElementById('new-relay').value = ''; 
+                renderRelays();
+            } 
+        }
+
+        function removeRelay(url) { 
+            savedRelays = savedRelays.filter(r => r !== url); 
+            localStorage.setItem('mbit_relays', JSON.stringify(savedRelays)); 
+            if(sockets[url]) sockets[url].close(); 
+            renderRelays(); 
+        }
+
         // --- RELAY & FEED LOGIC ---
         function connectToRelay(url) {
             try {
                 const ws = new WebSocket(url); sockets[url] = ws;
                 ws.onopen = () => { 
+                    renderRelays(); // Update UI status
                     if (url === 'wss://trending.relays.land') {
-                        // Request curated content specifically
                         ws.send(JSON.stringify(["REQ", "trending_sub", { kinds:[1], limit:100 }]));
                     } else {
-                        // Standard Feed
                         ws.send(JSON.stringify(["REQ", "g", { kinds:[1,6], limit:40 }])); 
                     }
-                    
                     if(myPubKey) {
                         fetchProfile(myPubKey);
                         ws.send(JSON.stringify(["REQ", "my_contacts", { kinds:[3], authors:[myPubKey], limit:1 }]));
                     }
-                    renderRelays(); 
                 };
+                ws.onerror = () => { renderRelays(); };
+                ws.onclose = () => { renderRelays(); };
                 ws.onmessage = (msg) => {
                     const data = JSON.parse(msg.data);
                     if (data[0] === 'EOSE') { 
@@ -584,16 +615,14 @@
                         if (subId === 'bookmarks_sub') handleBookmarkEvent(ev);
                     }
                 };
-            } catch(e) {}
+            } catch(e) { renderRelays(); }
         }
 
-        // FIXED: Handle duplicate events while preserving Trending status
         function handleGlobalEvent(ev, sourceRelay) { 
             ev._relay = sourceRelay;
             const isTrendingSource = sourceRelay === 'wss://trending.relays.land';
             
             if(processedIds.has(ev.id)) {
-                // If we have it, but now it comes from trending, UPDATE IT
                 if (isTrendingSource) {
                     const existing = events.find(e => e.id === ev.id);
                     if (existing) {
@@ -669,7 +698,6 @@
             } else {
                 list = events.filter(ev => ev._isTrending === true);
                 if (list.length === 0) {
-                     // Fallback: If no trending data yet, show first 10 global to avoid empty screen
                      if (events.length > 0) list = events.slice(0, 10);
                      else {
                         container.innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Waiting for trending data...<br>(Ensure wss://trending.relays.land is connected)</div>';
