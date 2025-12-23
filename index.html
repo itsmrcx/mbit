@@ -330,6 +330,16 @@
                 <span style="font-size: 1.2em; opacity: 0.7;">BIG</span>
             </div>
             <hr style="border:0; border-top:1px dashed var(--border-color); margin:20px 0;">
+            <h3>>> NOSTR WALLET CONNECT</h3>
+            <div style="margin-bottom:15px;">
+                <input type="password" id="nwc-input" placeholder="nostr+walletconnect://...">
+                <div style="display:flex; gap:10px;">
+                    <button onclick="saveNWC()">CONNECT</button>
+                    <button class="danger secondary" onclick="disconnectNWC()">DISCONNECT</button>
+                </div>
+                <div id="nwc-status" style="font-size:0.8em; margin-top:5px; color:#F7931A; opacity:0.8;">Status: Not Connected</div>
+            </div>
+            <hr style="border:0; border-top:1px dashed var(--border-color); margin:20px 0;">
             <h3>>> CONTENT FILTERS</h3>
             <div style="margin-bottom: 15px;">
                 <label style="display:flex; align-items:center; cursor:pointer;">
@@ -471,6 +481,9 @@
         let filterSettings;
         try { filterSettings = JSON.parse(localStorage.getItem('mbit_filters')) || { hideNsfw: false, blockedTags: [] }; } catch(e) { filterSettings = { hideNsfw: false, blockedTags: [] }; }
         
+        // Load NWC String
+        let nwcString = localStorage.getItem('mbit_nwc') || null;
+
         const sockets = {};
         
         let events = [], incomingBuffer = [], pendingEvents = []; 
@@ -515,6 +528,7 @@
 
         document.getElementById('nsfw-toggle').checked = filterSettings.hideNsfw;
         renderFilterList();
+        updateNwcStatus();
 
         function goHome() {
             ['panel-relays', 'panel-identity', 'panel-my-profile', 'panel-user-profile', 'panel-settings', 'panel-search', 'panel-notifications', 'panel-thread', 'panel-bookmarks'].forEach(p => document.getElementById(p).classList.add('hidden'));
@@ -1266,6 +1280,47 @@
         function openBookmarks() { togglePanel('panel-bookmarks'); const ids = [...bookmarks]; if(ids.length === 0) { document.getElementById('bookmarks-feed').innerHTML = "No bookmarks yet."; return; } document.getElementById('bookmarks-feed').innerHTML = "Loading saved posts..."; bookmarkEvents = []; Object.values(sockets).forEach(ws => { if(ws.readyState === 1) ws.send(JSON.stringify(["REQ", "bookmarks_sub", { kinds: [1], ids: ids }])); }); }
         function handleBookmarkEvent(ev) { if(bookmarkEvents.some(e => e.id === ev.id)) return; bookmarkEvents.push(ev); bookmarkEvents.sort((a,b) => b.created_at - a.created_at); document.getElementById('bookmarks-feed').innerHTML = bookmarkEvents.map(generatePostHTML).join(''); fetchProfileIfNeeded(ev.pubkey); }
         
+        /* --- NWC (WALLET CONNECT) LOGIC --- */
+        function saveNWC() {
+            const uri = document.getElementById('nwc-input').value.trim();
+            if(!uri.startsWith('nostr+walletconnect://')) return alert("Invalid NWC URI");
+            localStorage.setItem('mbit_nwc', uri);
+            nwcString = uri;
+            updateNwcStatus();
+            alert("Wallet Connected!");
+        }
+
+        function disconnectNWC() {
+            localStorage.removeItem('mbit_nwc');
+            nwcString = null;
+            document.getElementById('nwc-input').value = '';
+            updateNwcStatus();
+            alert("Wallet Disconnected");
+        }
+
+        function updateNwcStatus() {
+            const el = document.getElementById('nwc-status');
+            if(nwcString) {
+                el.innerText = "Status: CONNECTED via NWC";
+                el.style.color = "#00FF41";
+            } else {
+                el.innerText = "Status: Not Connected";
+                el.style.color = "#F7931A";
+            }
+        }
+
+        // Helper to parse NWC URI
+        function parseNwcUri(uri) {
+            try {
+                const url = new URL(uri.replace('nostr+walletconnect:', 'https:'));
+                return {
+                    pubkey: url.host,
+                    relay: url.searchParams.get('relay'),
+                    secret: url.searchParams.get('secret')
+                };
+            } catch(e) { return null; }
+        }
+
         /* --- ZAP LOGIC (Snort Style) --- */
         let zapContext = null;
 
@@ -1309,14 +1364,13 @@
             const parts = lud16.split('@');
             if (parts.length !== 2) return alert("Invalid LUD16");
 
-            // UX: Show loading state
             const btn = document.querySelector('#zap-modal .zap-active');
             const oldText = btn.innerText;
-            btn.innerText = "fetching invoice...";
+            btn.innerText = "Processing...";
             btn.disabled = true;
 
             try {
-                // A. Get LNURL Service Data
+                // A. Get LNURL Data
                 const url = `https://${parts[1]}/.well-known/lnurlp/${parts[0]}`;
                 const res = await fetch(url);
                 const data = await res.json();
@@ -1324,11 +1378,11 @@
                 if (data.callback) {
                     const millisats = amount * 1000;
                     if (millisats < data.minSendable || millisats > data.maxSendable) {
-                        alert(`Amount out of range (Min: ${data.minSendable/1000}, Max: ${data.maxSendable/1000})`);
+                        alert(`Amount out of range.`);
                         throw new Error("Range error");
                     }
 
-                    // B. Create NIP-57 Zap Request Event
+                    // B. Create Zap Request Event
                     let zapTags = [
                         ['p', pubkey],
                         ['relays', ...savedRelays],
@@ -1345,7 +1399,7 @@
                         pubkey: myPubKey
                     };
 
-                    // C. Sign the Request
+                    // C. Sign Request
                     let signedEvent;
                     if (authMode === 'extension') {
                         signedEvent = await window.nostr.signEvent(zapEvent);
@@ -1355,26 +1409,67 @@
                         signedEvent = zapEvent;
                     }
 
-                    // D. Encode and Fetch Invoice
+                    // D. Get Invoice
                     const encodedEvent = encodeURI(JSON.stringify(signedEvent));
                     const cbUrl = `${data.callback}?amount=${millisats}&nostr=${encodedEvent}`;
-                    
                     const cbRes = await fetch(cbUrl);
                     const cbData = await cbRes.json();
 
                     if (cbData.pr) {
-                        // E. Launch Wallet
                         closeZapModal();
+                        
+                        // ** NWC CHECK **
+                        if (nwcString) {
+                            // Pay via NWC
+                            const nwc = parseNwcUri(nwcString);
+                            if(nwc) {
+                                btn.innerText = "Paying via NWC...";
+                                try {
+                                    const payload = {
+                                        method: "pay_invoice",
+                                        params: { invoice: cbData.pr }
+                                    };
+                                    
+                                    // Encrypt payload
+                                    const ciphertext = await window.NostrTools.nip04.encrypt(nwc.secret, nwc.pubkey, JSON.stringify(payload));
+                                    
+                                    // Create NWC Request Event (Kind 23194)
+                                    const nwcEvent = {
+                                        kind: 23194,
+                                        content: ciphertext,
+                                        tags: [['p', nwc.pubkey]],
+                                        created_at: Math.floor(Date.now() / 1000),
+                                        pubkey: window.NostrTools.getPublicKey(nwc.secret)
+                                    };
+                                    
+                                    nwcEvent.id = window.NostrTools.getEventHash(nwcEvent);
+                                    nwcEvent.sig = window.NostrTools.signEvent(nwcEvent, nwc.secret);
+                                    
+                                    // Publish to NWC Relay
+                                    const relay = new WebSocket(nwc.relay);
+                                    relay.onopen = () => {
+                                        relay.send(JSON.stringify(["EVENT", nwcEvent]));
+                                        alert("Zap sent via NWC! ⚡");
+                                        relay.close();
+                                    };
+                                    return; // Stop here, payment handled
+                                } catch(e) {
+                                    console.error(e);
+                                    alert("NWC Error. Opening wallet instead.");
+                                }
+                            }
+                        }
+
+                        // Fallback to manual wallet
                         window.location.href = `lightning:${cbData.pr}`;
                     } else {
-                        alert("Lightning Node refused to generate invoice: " + (cbData.reason || "Unknown error"));
+                        alert("Invoice generation failed: " + (cbData.reason || "Unknown"));
                     }
                 }
             } catch (e) {
                 console.error(e);
-                alert("Zap failed. See console.");
+                alert("Zap failed.");
             } finally {
-                // Reset button state
                 btn.innerText = oldText;
                 btn.disabled = false;
             }
