@@ -103,7 +103,7 @@
         button.danger { background: #ff4141; color: white; }
         button.secondary { background: var(--post-border); color: var(--text-color); border: 1px solid var(--border-color); }
         
-        .relay-item { display: flex; align-items: center; justify-content: space-between; background: var(--input-bg); border: 1px solid var(--post-border); padding: 8px; margin-bottom: 5px; gap: 10px; color: var(--text-color); }
+        .relay-item { display: flex; align-items: center; justify-content: space-between; background: var(--input-bg); border: 1px solid var(--post-border); padding: 8px; margin-bottom: 5px; gap: 10px; }
         .relay-content { display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex-grow: 1; }
         .relay-url { font-size: 0.8em; margin-left: 10px; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
 
@@ -174,7 +174,6 @@
         .notif-item:hover { background: rgba(255,255,255,0.05); }
         .notif-icon { margin-right: 15px; font-size: 1.5em; width: 25px; text-align: center; }
 
-        /* FIXED STICKY FOOTER STYLE */
         .sticky-footer { 
             position: fixed; 
             bottom: 0; 
@@ -236,8 +235,6 @@
                 <input type="text" id="new-relay" placeholder="wss://..." style="margin-bottom:0; width: 80%;">
                 <button onclick="addRelay()" style="width: 18%; margin-left: 2%;">ADD</button>
             </div>
-            <!-- Improved Reconnect Button -->
-            <button onclick="forceReconnectAll()" class="small secondary" style="width:100%; margin-top:10px;">RECONNECT ALL</button>
             <br><button class="small secondary" onclick="goHome()">CLOSE</button>
         </div>
 
@@ -446,21 +443,7 @@
         const defaultRelays = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://relay.mostr.pub', 'wss://trending.relays.land'];
         
         let savedRelays;
-        try {
-            savedRelays = JSON.parse(localStorage.getItem('mbit_relays'));
-            if (!Array.isArray(savedRelays) || savedRelays.length === 0) {
-                savedRelays = defaultRelays;
-            }
-            if (!savedRelays.includes('wss://trending.relays.land')) {
-                savedRelays.push('wss://trending.relays.land');
-                localStorage.setItem('mbit_relays', JSON.stringify(savedRelays));
-            }
-            if (!savedRelays.includes('wss://relay.mostr.pub')) {
-                savedRelays.push('wss://relay.mostr.pub');
-                localStorage.setItem('mbit_relays', JSON.stringify(savedRelays));
-            }
-        } catch(e) { savedRelays = defaultRelays; }
-
+        try { savedRelays = JSON.parse(localStorage.getItem('mbit_relays')) || defaultRelays; } catch(e) { savedRelays = defaultRelays; }
         let filterSettings;
         try { filterSettings = JSON.parse(localStorage.getItem('mbit_filters')) || { hideNsfw: false, blockedTags: [] }; } catch(e) { filterSettings = { hideNsfw: false, blockedTags: [] }; }
         
@@ -476,6 +459,7 @@
         let bookmarks = new Set();
         try { bookmarks = new Set(JSON.parse(localStorage.getItem('mbit_bookmarks')) || []); } catch(e){}
         
+        // PERSISTENT CONTACTS FIX
         let myContacts = new Set();
         try {
             const stored = localStorage.getItem('mbit_contacts');
@@ -516,7 +500,6 @@
         document.getElementById('nsfw-toggle').checked = filterSettings.hideNsfw;
         renderFilterList();
         updateNwcStatus();
-        renderRelays(); // FORCE RENDER ON STARTUP
 
         function goHome() {
             ['panel-relays', 'panel-identity', 'panel-my-profile', 'panel-user-profile', 'panel-settings', 'panel-search', 'panel-notifications', 'panel-thread', 'panel-bookmarks'].forEach(p => document.getElementById(p).classList.add('hidden'));
@@ -533,82 +516,30 @@
             });
             document.getElementById(id).classList.remove('hidden');
             if (id === 'panel-my-profile') loadMyHistory();
-            if (id === 'panel-relays') renderRelays(); // Ensure relays render when panel opens
+            if (id === 'panel-relays') renderRelays();
             currentViewedProfile = null;
             currentThreadId = null;
         }
 
-        function renderRelays() { 
-            const list = document.getElementById('relay-list');
-            if (!list) return;
-            list.innerHTML = savedRelays.map(url => { 
-                const ws = sockets[url];
-                let status = '<span style="color:red; font-weight:bold; margin-right:5px;">#OFF</span>';
-                if (ws) {
-                    if (ws.readyState === 1) status = '<span style="color:#00FF41; font-weight:bold; margin-right:5px;">#ON</span>';
-                    else if (ws.readyState === 0) status = '<span style="color:orange; font-weight:bold; margin-right:5px;">#...</span>';
-                }
-                return `<div class="relay-item"><div class="relay-content">${status}<span class="relay-url" title="${url}">${url}</span></div><button class="small danger" style="width: 30px; flex-shrink: 0;" onclick="removeRelay('${url}')">X</button></div>`;
-            }).join(''); 
-        }
-
-        function addRelay() { 
-            let url = document.getElementById('new-relay').value.trim(); 
-            if(url){ 
-                if(!url.startsWith('wss://')) url = 'wss://' + url; 
-                savedRelays.push(url); 
-                localStorage.setItem('mbit_relays', JSON.stringify(savedRelays)); 
-                connectToRelay(url, true); 
-                document.getElementById('new-relay').value = ''; 
-                renderRelays();
-            } 
-        }
-
-        function removeRelay(url) { 
-            savedRelays = savedRelays.filter(r => r !== url); 
-            localStorage.setItem('mbit_relays', JSON.stringify(savedRelays)); 
-            if(sockets[url]) sockets[url].close(); 
-            renderRelays(); 
-        }
-
         // --- RELAY & FEED LOGIC ---
-        function forceReconnectAll() {
-            Object.values(sockets).forEach(ws => ws.close());
-            savedRelays.forEach(url => connectToRelay(url, true));
-        }
-
-        function connectToRelay(url, force = false) {
-            // If already connected/connecting and not forced, skip
-            if (sockets[url] && (sockets[url].readyState === 0 || sockets[url].readyState === 1) && !force) return;
-            
-            if (sockets[url]) sockets[url].close();
-
+        function connectToRelay(url) {
             try {
-                const ws = new WebSocket(url); 
-                sockets[url] = ws;
-                renderRelays(); // Update to show "Connecting" (Yellow)
-
+                const ws = new WebSocket(url); sockets[url] = ws;
                 ws.onopen = () => { 
-                    renderRelays(); // Update to show "ON" (Green)
                     if (url === 'wss://trending.relays.land') {
+                        // Request curated content specifically
                         ws.send(JSON.stringify(["REQ", "trending_sub", { kinds:[1], limit:100 }]));
                     } else {
+                        // Standard Feed
                         ws.send(JSON.stringify(["REQ", "g", { kinds:[1,6], limit:40 }])); 
                     }
+                    
                     if(myPubKey) {
                         fetchProfile(myPubKey);
                         ws.send(JSON.stringify(["REQ", "my_contacts", { kinds:[3], authors:[myPubKey], limit:1 }]));
                     }
+                    renderRelays(); 
                 };
-                
-                ws.onerror = () => { renderRelays(); };
-                
-                ws.onclose = () => { 
-                    renderRelays(); // Update to show "OFF" (Red)
-                    // Auto-reconnect after 5 seconds
-                    setTimeout(() => connectToRelay(url), 5000);
-                };
-
                 ws.onmessage = (msg) => {
                     const data = JSON.parse(msg.data);
                     if (data[0] === 'EOSE') { 
@@ -619,6 +550,7 @@
                         const ev = data[2];
                         processEventStats(ev); 
                         
+                        // Metadata & Contacts
                         if (subId === 'my_meta' || subId === 'user_meta' || subId.startsWith('m_')) {
                             try { profiles[ev.pubkey].meta = JSON.parse(ev.content); } catch(e) { initProfileData(ev.pubkey); profiles[ev.pubkey].meta = JSON.parse(ev.content); }
                             if(ev.pubkey === myPubKey) updateMyProfileHeader();
@@ -629,6 +561,7 @@
                             processProfileEvent(ev, true);
                         }
 
+                        // Feed Routing
                         if (subId === 'trending_sub') handleGlobalEvent(ev, 'wss://trending.relays.land');
                         if (subId === 'g') handleGlobalEvent(ev, url); 
                         
@@ -640,18 +573,20 @@
                         if (subId === 'bookmarks_sub') handleBookmarkEvent(ev);
                     }
                 };
-            } catch(e) { renderRelays(); }
+            } catch(e) {}
         }
 
         function handleGlobalEvent(ev, sourceRelay) { 
             ev._relay = sourceRelay;
             const isTrendingSource = sourceRelay === 'wss://trending.relays.land';
             
+            // Deduplication logic that preserves trending status
             if(processedIds.has(ev.id)) {
                 if (isTrendingSource) {
                     const existing = events.find(e => e.id === ev.id);
                     if (existing) {
                         existing._isTrending = true;
+                        // Force refresh if we are staring at the trending list
                         if(currentFeedTab === 'trending') renderGlobalFeed();
                     }
                 }
@@ -665,6 +600,7 @@
             incomingBuffer.push(ev); 
         }
 
+        // Interval to process buffer
         setInterval(() => { 
             if(incomingBuffer.length===0) return; 
             incomingBuffer.sort((a,b)=>b.created_at-a.created_at); 
@@ -721,13 +657,11 @@
                     return;
                 }
             } else {
+                // Trending Tab
                 list = events.filter(ev => ev._isTrending === true);
                 if (list.length === 0) {
-                     if (events.length > 0) list = events.slice(0, 10);
-                     else {
-                        container.innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Waiting for trending data...<br>(Ensure wss://trending.relays.land is connected)</div>';
-                        return;
-                     }
+                     container.innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Waiting for trending data...<br>(Ensure wss://trending.relays.land is connected)</div>';
+                     return;
                 }
             }
 
@@ -738,15 +672,19 @@
         function processProfileEvent(ev, isMe) {
             const pk = ev.pubkey;
             initProfileData(pk);
+            
+            // Metadata (Kind 0)
             if (ev.kind === 0) { try { profiles[pk].meta = JSON.parse(ev.content); } catch(e) {} }
+            
+            // Contact List (Kind 3)
             if (ev.kind === 3) {
                 if (isMe || pk === currentViewedProfile) {
                      const following = ev.tags.filter(t => t[0] === 'p').map(t => t[1]);
                      profiles[pk].following = new Set(following);
                      if (isMe) {
                          myContacts = new Set(following); 
-                         localStorage.setItem('mbit_contacts', JSON.stringify(following)); 
-                         if(currentFeedTab === 'following') renderGlobalFeed(); 
+                         localStorage.setItem('mbit_contacts', JSON.stringify(following)); // Save!
+                         if(currentFeedTab === 'following') renderGlobalFeed(); // Refresh feed
                      }
                 } else {
                     const target = isMe ? myPubKey : currentViewedProfile;
@@ -761,11 +699,13 @@
             if (pk === currentViewedProfile) renderUserProfileHeader(pk);
         }
 
-        // --- HELPER FUNCTIONS ---
-        function initProfileData(pubkey) { if (!profiles[pubkey]) profiles[pubkey] = { meta: {}, following: new Set(), followers: new Set(), relays: [] }; }
+        // --- HELPER FUNCTIONS (unchanged logic) ---
+        function initProfileData(pubkey) {
+            if (!profiles[pubkey]) profiles[pubkey] = { meta: {}, following: new Set(), followers: new Set(), relays: [] };
+        }
         function fetchProfileIfNeeded(pubkey) { if(!profiles[pubkey] && !requestedProfiles.has(pubkey)) { requestedProfiles.add(pubkey); Object.values(sockets).forEach(s => { if(s.readyState===1) s.send(JSON.stringify(["REQ", "m_"+pubkey.substring(0,8), { kinds:[0], authors:[pubkey], limit:1 }])); }); } }
         
-        // --- THREAD LOGIC ---
+        // --- THREAD LOGIC (Permissive) ---
         function getImmediateParentId(ev) {
             const replyTag = ev.tags.find(t => t[0] === 'e' && t[3] === 'reply');
             if (replyTag) return replyTag[1];
@@ -853,7 +793,7 @@
             return content; 
         }
 
-        // OTHER UTILS
+        // OTHER UTILS (Search, Notifications, Profile, Zaps) - Minified for brevity as they are unchanged logic
         function openSearch() { togglePanel('panel-search'); if (!isSearching) { document.getElementById('search-status').innerText = 'UNIVERSAL FEED (LIVE):'; renderDiscoveryFeed(); } }
         function clearSearch() { document.getElementById('search-input').value = ""; isSearching = false; document.getElementById('search-status').innerText = 'UNIVERSAL FEED (LIVE):'; renderDiscoveryFeed(); }
         function renderDiscoveryFeed() { document.getElementById('search-results').innerHTML = events.map(generatePostHTML).join(''); }
@@ -862,7 +802,7 @@
         function openNotifications() { togglePanel('panel-notifications'); refreshNotifications(); }
         function refreshNotifications() { if (!myPubKey) return document.getElementById('notifications-feed').innerHTML = "Please login."; notifEvents = []; Object.values(sockets).forEach(ws => { if (ws.readyState === 1) ws.send(JSON.stringify(["REQ", "notif_sub", { '#p': [myPubKey], kinds: [1, 9735, 6, 7], limit: 50 }])); }); }
         function handleNotifEvent(ev) { if (notifEvents.some(e => e.id === ev.id)) return; notifEvents.push(ev); notifEvents.sort((a,b) => b.created_at - a.created_at); renderNotifications(); fetchProfileIfNeeded(ev.pubkey); }
-        function renderNotifications() { document.getElementById('notifications-feed').innerHTML = notifEvents.map(ev => generatePostHTML(ev)).join(''); } 
+        function renderNotifications() { document.getElementById('notifications-feed').innerHTML = notifEvents.map(ev => generatePostHTML(ev)).join(''); } // Simplified for length
         function openBookmarks() { togglePanel('panel-bookmarks'); if(bookmarks.size===0) document.getElementById('bookmarks-feed').innerHTML = "No bookmarks."; else { bookmarkEvents=[]; Object.values(sockets).forEach(ws => ws.send(JSON.stringify(["REQ", "bookmarks_sub", { kinds: [1], ids: [...bookmarks] }]))); } }
         function handleBookmarkEvent(ev) { if(bookmarkEvents.some(e=>e.id===ev.id))return; bookmarkEvents.push(ev); document.getElementById('bookmarks-feed').innerHTML = bookmarkEvents.map(generatePostHTML).join(''); }
         
@@ -942,7 +882,7 @@
             else document.getElementById('nsec-display-container').classList.add('hidden'); 
         }
         
-        savedRelays.forEach(url => connectToRelay(url));
+        savedRelays.forEach(connectToRelay);
         goHome();
     </script>
 </body>
