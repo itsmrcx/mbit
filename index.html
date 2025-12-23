@@ -103,7 +103,7 @@
         button.danger { background: #ff4141; color: white; }
         button.secondary { background: var(--post-border); color: var(--text-color); border: 1px solid var(--border-color); }
         
-        .relay-item { display: flex; align-items: center; justify-content: space-between; background: var(--input-bg); border: 1px solid var(--post-border); padding: 8px; margin-bottom: 5px; gap: 10px; color: var(--text-color); }
+        .relay-item { display: flex; align-items: center; justify-content: space-between; background: var(--input-bg); border: 1px solid var(--post-border); padding: 8px; margin-bottom: 5px; gap: 10px; }
         .relay-content { display: flex; align-items: center; overflow: hidden; white-space: nowrap; flex-grow: 1; }
         .relay-url { font-size: 0.8em; margin-left: 10px; overflow: hidden; text-overflow: ellipsis; opacity: 0.9; }
 
@@ -219,7 +219,7 @@
     <header>
         <h1>mBIT</h1>
         <div class="nav-bar">
-            <!-- Removed #FEED per request -->
+            <!-- Removed #FEED from here as requested -->
             <span class="nav-item" onclick="togglePanel('panel-identity')">#LOG IN</span>
             <span>|</span>
             <span class="nav-item" onclick="togglePanel('panel-my-profile')">#MY PROFILE</span>
@@ -237,8 +237,6 @@
                 <input type="text" id="new-relay" placeholder="wss://..." style="margin-bottom:0; width: 80%;">
                 <button onclick="addRelay()" style="width: 18%; margin-left: 2%;">ADD</button>
             </div>
-            <!-- Improved Reconnect Button -->
-            <button onclick="forceReconnectAll()" class="small secondary" style="width:100%; margin-top:10px;">RECONNECT ALL</button>
             <br><button class="small secondary" onclick="goHome()">CLOSE</button>
         </div>
 
@@ -341,6 +339,7 @@
             <br><br><button class="small secondary" onclick="goHome()">CLOSE</button>
         </div>
 
+        <!-- 6. SEARCH PANEL -->
         <div id="panel-search" class="dropdown-panel hidden">
             <h3>>> SEARCH & DISCOVERY</h3>
             <div style="display:flex; gap:10px;">
@@ -353,6 +352,7 @@
             <div id="search-results"></div>
         </div>
 
+        <!-- 7. NOTIFICATIONS PANEL -->
         <div id="panel-notifications" class="dropdown-panel hidden">
             <h3>>> NOTIFICATIONS</h3>
             <div class="notif-tabs" style="justify-content: space-around;">
@@ -364,6 +364,7 @@
             <div id="notifications-feed">Loading...</div>
         </div>
 
+        <!-- 8. THREAD VIEW PANEL -->
         <div id="panel-thread" class="dropdown-panel hidden">
             <button class="back-btn" onclick="goHome()">&lt; #BACK TO FEED</button>
             <h3>>> THREAD</h3>
@@ -373,6 +374,7 @@
             <div id="thread-replies-container">Loading replies...</div>
         </div>
         
+        <!-- 9. BOOKMARKS PANEL -->
         <div id="panel-bookmarks" class="dropdown-panel hidden">
             <h3>>> SAVED BOOKMARKS</h3>
             <button class="small secondary" onclick="openBookmarks()" style="margin-bottom:10px;">REFRESH LIST</button>
@@ -383,7 +385,6 @@
         <div id="feed-container">
             <div id="new-btn" class="hidden" onclick="mergeQueue()">>> LOAD NEW SIGNALS <<</div>
             
-            <!-- ADDED TABS -->
             <div class="profile-subnav" style="margin-bottom: 20px;">
                 <button id="ftab-following" class="subnav-btn" onclick="switchFeedTab('following')">NOTES</button>
                 <button id="ftab-trending" class="subnav-btn active" onclick="switchFeedTab('trending')">TRENDING</button>
@@ -396,7 +397,6 @@
     <!-- FAB & MODALS -->
     <div class="fab-btn" onclick="openComposer()">+</div>
 
-    <!-- COMPOSER MODAL (POPUP) -->
     <div id="composer-modal" class="modal-overlay hidden">
         <div class="modal-content">
             <div id="reply-context-bar" class="hidden">
@@ -411,7 +411,6 @@
         </div>
     </div>
 
-    <!-- ZAP MODAL (SNORT STYLE) -->
     <div id="zap-modal" class="modal-overlay hidden">
         <div class="modal-content" style="max-width: 400px;">
             <h3 style="color:#F7931A; text-align:center; margin-top:0;">⚡ ZAP</h3>
@@ -454,11 +453,11 @@
         const defaultRelays = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://relay.mostr.pub', 'wss://trending.relays.land'];
         
         let savedRelays;
-        try {
+        try { 
             savedRelays = JSON.parse(localStorage.getItem('mbit_relays'));
-            if (!Array.isArray(savedRelays) || savedRelays.length === 0) {
-                savedRelays = defaultRelays;
-            }
+            if(!Array.isArray(savedRelays) || savedRelays.length === 0) savedRelays = defaultRelays;
+            
+            // ENSURE NEW RELAYS ARE PRESENT
             if (!savedRelays.includes('wss://trending.relays.land')) {
                 savedRelays.push('wss://trending.relays.land');
                 localStorage.setItem('mbit_relays', JSON.stringify(savedRelays));
@@ -472,9 +471,7 @@
         let filterSettings;
         try { filterSettings = JSON.parse(localStorage.getItem('mbit_filters')) || { hideNsfw: false, blockedTags: [] }; } catch(e) { filterSettings = { hideNsfw: false, blockedTags: [] }; }
         
-        // NWC
         let nwcString = localStorage.getItem('mbit_nwc') || null;
-
         const sockets = {};
         
         let events = [], incomingBuffer = [], pendingEvents = []; 
@@ -486,7 +483,6 @@
         let bookmarks = new Set();
         try { bookmarks = new Set(JSON.parse(localStorage.getItem('mbit_bookmarks')) || []); } catch(e){}
         
-        // Contacts Persist
         let myContacts = new Set();
         try {
             const stored = localStorage.getItem('mbit_contacts');
@@ -505,11 +501,9 @@
         let currentUserTab = 'notes'; 
         let currentMyTab = 'notes';
         let currentNotifTab = 'all';
-        
-        // Added Feed Tab
-        let currentFeedTab = 'trending'; 
+        let currentFeedTab = 'trending';
 
-        // Init Theme
+        // Init
         function changeTheme(theme) {
             document.documentElement.removeAttribute('data-theme');
             if (theme !== 'dark') document.documentElement.setAttribute('data-theme', theme);
@@ -518,7 +512,6 @@
         changeTheme(localStorage.getItem('mbit_theme') || 'matrix');
         document.getElementById('theme-selector').value = localStorage.getItem('mbit_theme') || 'matrix';
 
-        // Init Font Size
         function changeFontSize(size) {
             document.documentElement.style.setProperty('--base-font-size', size + 'px');
             localStorage.setItem('mbit_fontsize', size);
@@ -530,14 +523,9 @@
         document.getElementById('nsfw-toggle').checked = filterSettings.hideNsfw;
         renderFilterList();
         updateNwcStatus();
-        renderRelays(); // FORCE RENDER ON STARTUP
-
-        // UI Refresh Loop for Relays
-        setInterval(() => {
-            if(!document.getElementById('panel-relays').classList.contains('hidden')) {
-                renderRelays();
-            }
-        }, 1000);
+        
+        // IMMEDIATE RENDER
+        renderRelays();
 
         function goHome() {
             ['panel-relays', 'panel-identity', 'panel-my-profile', 'panel-user-profile', 'panel-settings', 'panel-search', 'panel-notifications', 'panel-thread', 'panel-bookmarks'].forEach(p => document.getElementById(p).classList.add('hidden'));
@@ -559,133 +547,98 @@
             currentThreadId = null;
         }
 
-        // --- RELAY RENDERING ---
+        // --- RELAYS ---
         function renderRelays() { 
             const list = document.getElementById('relay-list');
-            if (!list) return;
-            list.innerHTML = savedRelays.map(url => { 
-                const ws = sockets[url];
-                let status = '<span style="color:red; font-weight:bold; margin-right:5px;">#OFF</span>';
-                if (ws) {
-                    if (ws.readyState === 1) status = '<span style="color:#00FF41; font-weight:bold; margin-right:5px;">#ON</span>';
-                    else if (ws.readyState === 0) status = '<span style="color:orange; font-weight:bold; margin-right:5px;">#...</span>';
-                }
-                return `<div class="relay-item"><div class="relay-content">${status}<span class="relay-url" title="${url}">${url}</span></div><button class="small danger" style="width: 30px; flex-shrink: 0;" onclick="removeRelay('${url}')">X</button></div>`; 
-            }).join(''); 
+            if(list) {
+                list.innerHTML = savedRelays.map(url => { 
+                    const isOpen = sockets[url] && sockets[url].readyState === 1; 
+                    const color = isOpen ? '#00FF41' : 'red';
+                    const txt = isOpen ? '#ON' : '#OFF';
+                    return `<div class="relay-item"><div class="relay-content"><span style="color:${color}; font-weight:bold; margin-right:5px;">${txt}</span><span class="relay-url" title="${url}">${url}</span></div><button class="small danger" style="width: 30px; flex-shrink: 0;" onclick="removeRelay('${url}')">X</button></div>`; 
+                }).join('');
+            }
         }
 
-        function addRelay() { 
-            let url = document.getElementById('new-relay').value.trim(); 
-            if(url){ 
-                if(!url.startsWith('wss://')) url = 'wss://' + url; 
-                savedRelays.push(url); 
-                localStorage.setItem('mbit_relays', JSON.stringify(savedRelays)); 
-                connectToRelay(url, true); 
-                document.getElementById('new-relay').value = ''; 
-                renderRelays();
-            } 
-        }
+        function addRelay() { let url = document.getElementById('new-relay').value.trim(); if(url){ if(!url.startsWith('wss://')) url = 'wss://' + url; savedRelays.push(url); localStorage.setItem('mbit_relays', JSON.stringify(savedRelays)); connectToRelay(url); document.getElementById('new-relay').value = ''; renderRelays(); } }
+        function removeRelay(url) { savedRelays = savedRelays.filter(r => r !== url); localStorage.setItem('mbit_relays', JSON.stringify(savedRelays)); if(sockets[url]) sockets[url].close(); renderRelays(); }
 
-        function removeRelay(url) { 
-            savedRelays = savedRelays.filter(r => r !== url); 
-            localStorage.setItem('mbit_relays', JSON.stringify(savedRelays)); 
-            if(sockets[url]) sockets[url].close(); 
-            renderRelays(); 
-        }
-
-        // --- RELAY & FEED LOGIC ---
-        function forceReconnectAll() {
-            Object.values(sockets).forEach(ws => ws.close());
-            savedRelays.forEach(url => connectToRelay(url, true));
-        }
-
-        function connectToRelay(url, force = false) {
-            // Only skip if connected AND not forced
-            if (sockets[url] && (sockets[url].readyState === 0 || sockets[url].readyState === 1) && !force) return;
-            
-            if (sockets[url]) sockets[url].close();
-
+        // --- FEED LOGIC (Reverting to original connection logic) ---
+        function connectToRelay(url) {
             try {
-                const ws = new WebSocket(url); 
-                sockets[url] = ws;
-                // Don't renderRelays here, the interval handles it.
-
+                const ws = new WebSocket(url); sockets[url] = ws;
                 ws.onopen = () => { 
-                    // Re-subscribe to everything we need when connection opens
+                    renderRelays();
                     if (url === 'wss://trending.relays.land') {
-                        ws.send(JSON.stringify(["REQ", "trending_sub", { kinds:[1], limit:100 }]));
+                         ws.send(JSON.stringify(["REQ", "trending_sub", { kinds:[1], limit:100 }]));
                     } else {
-                        ws.send(JSON.stringify(["REQ", "g", { kinds:[1,6], limit:40 }])); 
+                         ws.send(JSON.stringify(["REQ", "g", { kinds:[1,6], limit:40 }])); 
                     }
                     if(myPubKey) {
                         fetchProfile(myPubKey);
                         ws.send(JSON.stringify(["REQ", "my_contacts", { kinds:[3], authors:[myPubKey], limit:1 }]));
                     }
                 };
-                
-                ws.onerror = () => { renderRelays(); };
-                
-                ws.onclose = () => { 
-                    renderRelays(); 
-                    setTimeout(() => connectToRelay(url), 5000); // Auto Reconnect
-                };
-
                 ws.onmessage = (msg) => {
                     const data = JSON.parse(msg.data);
-                    if (data[0] === 'EOSE') { 
-                        if (data[1] === 'sub_me' && myEvents.length === 0) document.getElementById('my-feed').innerHTML = '<div style="text-align:center; padding:20px; opacity:0.6;">No notes found.</div>'; 
-                    }
+                    if (data[0] === 'EOSE') { if (data[1] === 'sub_me') { if (myEvents.length === 0) document.getElementById('my-feed').innerHTML = '<div style="text-align:center; padding:20px; opacity:0.6;">No notes found.</div>'; } }
                     if (data[0] === 'EVENT') {
                         const subId = data[1];
                         const ev = data[2];
                         processEventStats(ev); 
+                        if (subId === 'my_meta' || subId === 'user_meta') processProfileEvent(ev, subId === 'my_meta');
+                        if (subId === 'my_followers' || subId === 'user_followers') processProfileEvent(ev, subId === 'my_followers'); 
                         
-                        if (subId === 'my_meta' || subId === 'user_meta' || subId.startsWith('m_')) {
-                            try { profiles[ev.pubkey].meta = JSON.parse(ev.content); } catch(e) { initProfileData(ev.pubkey); profiles[ev.pubkey].meta = JSON.parse(ev.content); }
-                            if(ev.pubkey === myPubKey) updateMyProfileHeader();
-                            if(ev.pubkey === currentViewedProfile) renderUserProfileHeader(ev.pubkey);
-                        }
-                        
-                        if (subId === 'my_contacts' || (ev.kind === 3 && ev.pubkey === myPubKey)) {
-                            processProfileEvent(ev, true);
-                        }
-
+                        // Trending Logic Insertion
                         if (subId === 'trending_sub') handleGlobalEvent(ev, 'wss://trending.relays.land');
-                        if (subId === 'g') handleGlobalEvent(ev, url); 
                         
+                        if (subId === 'g') handleGlobalEvent(ev, url);
                         if (subId === 'sub_me') handleMyEvent(ev);
                         if (subId === 'sub_user') handleUserEvent(ev);
                         if (subId === 'search_sub') handleSearchEvent(ev);
                         if (subId === 'notif_sub') handleNotifEvent(ev);
-                        if (subId.startsWith('thread_')) handleThreadEvent(ev);
+                        
+                        // Thread
+                        if (subId === 'thread_main' || subId === 'thread_children' || subId.startsWith('thread_ancestor')) {
+                            handleThreadEvent(ev);
+                        }
+
+                        // Contacts
+                        if (subId === 'my_contacts' || (ev.kind === 3 && ev.pubkey === myPubKey)) processProfileEvent(ev, true);
+
                         if (subId === 'bookmarks_sub') handleBookmarkEvent(ev);
+                        if (subId.startsWith('m_')) { try { profiles[ev.pubkey].meta = JSON.parse(ev.content); } catch(e) { initProfileData(ev.pubkey); profiles[ev.pubkey].meta = JSON.parse(ev.content); } renderNotifications(); }
                     }
                 };
-            } catch(e) { renderRelays(); }
+            } catch(e) { console.log(e); }
         }
-
+        
+        function handleContacts(ev) { if(ev.kind===3) { const pTags = ev.tags.filter(t=>t[0]==='p').map(t=>t[1]); myContacts = new Set(pTags); if(currentViewedProfile) renderUserProfileHeader(currentViewedProfile); } }
+        
+        // FIXED DUPLICATE HANDLING FOR TRENDING
         function handleGlobalEvent(ev, sourceRelay) { 
             ev._relay = sourceRelay;
-            const isTrendingSource = sourceRelay === 'wss://trending.relays.land';
+            const isTrending = (sourceRelay === 'wss://trending.relays.land');
             
             if(processedIds.has(ev.id)) {
-                if (isTrendingSource) {
+                // If it's already there, but now coming from trending relay, update the flag
+                if (isTrending) {
                     const existing = events.find(e => e.id === ev.id);
-                    if (existing) {
-                         existing._isTrending = true;
-                         if(currentFeedTab === 'trending') renderGlobalFeed();
+                    if(existing) {
+                        existing._isTrending = true;
+                        if(currentFeedTab === 'trending') renderGlobalFeed();
                     }
                 }
                 return; 
             }
             
-            if (isTrendingSource) ev._isTrending = true;
-            
+            if(isTrending) ev._isTrending = true;
+
             processedIds.add(ev.id); 
             fetchProfileIfNeeded(ev.pubkey); 
             incomingBuffer.push(ev); 
         }
-
+        
         setInterval(() => { 
             if(incomingBuffer.length===0) return; 
             incomingBuffer.sort((a,b)=>b.created_at-a.created_at); 
@@ -700,11 +653,8 @@
             incomingBuffer=[]; 
         }, 1500);
 
-        function updateNewButton() { 
-            const b = document.getElementById('new-btn'); 
-            b.classList.toggle('hidden', pendingEvents.length===0); 
-            b.innerText = `>> LOAD ${pendingEvents.length} NEW SIGNALS <<`; 
-        }
+        function fetchProfileIfNeeded(pubkey) { if(!profiles[pubkey] && !requestedProfiles.has(pubkey)) { requestedProfiles.add(pubkey); Object.values(sockets).forEach(s => { if(s.readyState===1) s.send(JSON.stringify(["REQ", "m_"+pubkey.substring(0,8), { kinds:[0], authors:[pubkey], limit:1 }])); }); } }
+        function updateNewButton() { const b = document.getElementById('new-btn'); b.classList.toggle('hidden', pendingEvents.length===0); b.innerText = `>> LOAD ${pendingEvents.length} NEW SIGNALS <<`; }
         
         function mergeQueue() { 
             events = [...pendingEvents, ...events].slice(0, 100); 
@@ -730,7 +680,6 @@
                      container.innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Login to see posts from people you follow.</div>';
                      return;
                 }
-                
                 if (myContacts.size > 0) {
                     list = events.filter(ev => myContacts.has(ev.pubkey));
                     if (list.length === 0) {
@@ -738,57 +687,120 @@
                          return;
                     }
                 } else {
-                    container.innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">You are not following anyone yet.<br>Go to Search or Trending to find people.</div>';
+                    container.innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Loading contacts...<br>(Or you are following 0 people)</div>';
                     return;
                 }
             } else {
-                // TRENDING
                 list = events.filter(ev => ev._isTrending === true);
                 if (list.length === 0) {
-                     // Fallback
-                     if (events.length > 0) list = events.slice(0, 10);
+                     if (events.length > 0) list = events.slice(0, 10); // Fallback
                      else {
                         container.innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Waiting for trending data...</div>';
                         return;
                      }
                 }
             }
-
             container.innerHTML = list.map(generatePostHTML).join('');
         }
-
-        // --- CONTACTS LOGIC ---
-        function processProfileEvent(ev, isMe) {
-            const pk = ev.pubkey;
-            initProfileData(pk);
-            if (ev.kind === 0) { try { profiles[pk].meta = JSON.parse(ev.content); } catch(e) {} }
-            if (ev.kind === 3) {
-                if (isMe || pk === currentViewedProfile) {
-                     const following = ev.tags.filter(t => t[0] === 'p').map(t => t[1]);
-                     profiles[pk].following = new Set(following);
-                     if (isMe) {
-                         myContacts = new Set(following); 
-                         localStorage.setItem('mbit_contacts', JSON.stringify(following)); 
-                         if(currentFeedTab === 'following') renderGlobalFeed(); 
-                     }
-                } else {
-                    const target = isMe ? myPubKey : currentViewedProfile;
-                    if (target) {
-                        const followsTarget = ev.tags.some(t => t[0] === 'p' && t[1] === target);
-                        if (followsTarget) { initProfileData(target); profiles[target].followers.add(pk); }
-                    }
-                }
-            }
-            if (ev.kind === 10002) { const relays = ev.tags.filter(t => t[0] === 'r').map(t => t[1]); profiles[pk].relays = relays; }
-            if (isMe) updateMyProfileHeader();
-            if (pk === currentViewedProfile) renderUserProfileHeader(pk);
+        
+        async function toggleFollow(pubkey) { if(!myPubKey) return alert("Login required"); if(myContacts.has(pubkey)) myContacts.delete(pubkey); else myContacts.add(pubkey); renderUserProfileHeader(pubkey); const tags = Array.from(myContacts).map(p => ['p', p]); const event = { kind: 3, created_at: Math.floor(Date.now()/1000), tags: tags, content: "", pubkey: myPubKey }; await signAndBroadcast(event); }
+        async function signAndBroadcast(event) { if (authMode === 'extension') event = await window.nostr.signEvent(event); else { event.id = window.NostrTools.getEventHash(event); event.sig = window.NostrTools.signEvent(event, myPrivKey); } Object.values(sockets).forEach(ws => { if(ws.readyState === 1) ws.send(JSON.stringify(["EVENT", event])); }); return event; }
+        async function sendNote() { const content = document.getElementById('msg-input').value; if (!content) return; let tags = []; if (replyContext) { tags.push(['e', replyContext.id, '', 'reply']); tags.push(['p', replyContext.pubkey]); } const event = { kind: 1, created_at: Math.floor(Date.now()/1000), tags: tags, content: content, pubkey: myPubKey }; await signAndBroadcast(event); document.getElementById('msg-input').value = ""; closeComposer(); }
+        function login() { let k = document.getElementById('privkey-input').value.trim(); if(k.startsWith('nsec')) k = window.NostrTools.nip19.decode(k).data; localStorage.setItem('nostr_privkey', k); localStorage.setItem('nostr_pubkey', window.NostrTools.getPublicKey(k)); localStorage.setItem('nostr_mode', 'local'); location.reload(); }
+        function generateNewUser() { const sk = window.NostrTools.generatePrivateKey(); localStorage.setItem('nostr_privkey', sk); localStorage.setItem('nostr_pubkey', window.NostrTools.getPublicKey(sk)); localStorage.setItem('nostr_mode', 'local'); location.reload(); }
+        
+        async function saveProfile() { 
+            const existing = (profiles[myPubKey] && profiles[myPubKey].meta) ? profiles[myPubKey].meta : {};
+            const data = { 
+                name: existing.name || '',
+                display_name: document.getElementById('p-display-name').value,
+                about: document.getElementById('p-about').value, 
+                picture: document.getElementById('p-picture').value, 
+                website: document.getElementById('p-website').value, 
+                lud16: document.getElementById('p-lud16').value,
+                nip05: document.getElementById('p-nip05').value
+            }; 
+            let ev = { kind: 0, created_at: Math.floor(Date.now()/1000), tags: [], content: JSON.stringify(data), pubkey: myPubKey }; 
+            await signAndBroadcast(ev); alert("PUBLISHED"); location.reload(); 
         }
 
-        // --- HELPER FUNCTIONS ---
-        function initProfileData(pubkey) { if (!profiles[pubkey]) profiles[pubkey] = { meta: {}, following: new Set(), followers: new Set(), relays: [] }; }
-        function fetchProfileIfNeeded(pubkey) { if(!profiles[pubkey] && !requestedProfiles.has(pubkey)) { requestedProfiles.add(pubkey); Object.values(sockets).forEach(s => { if(s.readyState===1) s.send(JSON.stringify(["REQ", "m_"+pubkey.substring(0,8), { kinds:[0], authors:[pubkey], limit:1 }])); }); } }
+        function toggleProfileEditor() { const editor = document.getElementById('dynamic-profile-editor'); if (editor) editor.classList.toggle('hidden'); }
+        function logout() { localStorage.clear(); location.reload(); }
+        function copyKey(id) { const el = document.getElementById(id); el.select(); navigator.clipboard.writeText(el.value); alert("COPIED"); }
+        function copyToClipboard(text) { navigator.clipboard.writeText(text); alert("COPIED"); }
+        function toggleSecret() { const el = document.getElementById('display-nsec'); el.type = el.type === "password" ? "text" : "password"; }
+        function fetchProfile(pubkey) { Object.values(sockets).forEach(ws => ws.send(JSON.stringify(["REQ", "m_"+pubkey.substring(0,8), { kinds: [0], authors: [pubkey], limit: 1 }]))); }
+
+        async function loginExtension() {
+            if (typeof window.nostr === 'undefined') { await new Promise(r => setTimeout(r, 500)); if (typeof window.nostr === 'undefined') return alert("No Nostr extension found (Alby, nos2x, etc)."); }
+            try { const pubkey = await window.nostr.getPublicKey(); localStorage.setItem('nostr_pubkey', pubkey); localStorage.setItem('nostr_mode', 'extension'); location.reload(); } catch (err) { alert("Login failed or cancelled."); }
+        }
+
+        function openComposer() { if(!myPubKey) return alert("Please Login First"); document.getElementById('composer-modal').classList.remove('hidden'); document.getElementById('msg-input').focus(); }
+        function closeComposer() { document.getElementById('composer-modal').classList.add('hidden'); cancelReply(); }
+        function toggleNsfw() { filterSettings.hideNsfw = document.getElementById('nsfw-toggle').checked; saveFilters(); }
+        function addFilterTag() { const val = document.getElementById('filter-input').value.trim().toLowerCase(); if(val && !filterSettings.blockedTags.includes(val)) { filterSettings.blockedTags.push(val); document.getElementById('filter-input').value = ""; saveFilters(); renderFilterList(); } }
+        function removeFilterTag(tag) { filterSettings.blockedTags = filterSettings.blockedTags.filter(t => t !== tag); saveFilters(); renderFilterList(); }
+        function saveFilters() { localStorage.setItem('mbit_filters', JSON.stringify(filterSettings)); if(!document.getElementById('feed-container').classList.contains('hidden')) renderGlobalFeed(); }
+        function renderFilterList() { document.getElementById('filter-list').innerHTML = filterSettings.blockedTags.map(tag => `<span class="filter-tag">#${tag} <span class="remove-tag" onclick="removeFilterTag('${tag}')">x</span></span>`).join(''); }
+        function isBlocked(ev) { if (!ev.tags) return false; const evTags = ev.tags.filter(t => t[0] === 't').map(t => t[1].toLowerCase()); if (filterSettings.hideNsfw && evTags.includes('nsfw')) return true; for (let blocked of filterSettings.blockedTags) { if (evTags.includes(blocked)) return true; } return false; }
         
-        // --- THREAD LOGIC (Super Permissive Fix) ---
+        function doBookmark(id) { if(bookmarks.has(id)) { bookmarks.delete(id); alert("Bookmark Removed"); } else { bookmarks.add(id); alert("Saved to Bookmarks"); } localStorage.setItem('mbit_bookmarks', JSON.stringify([...bookmarks])); if(!document.getElementById('panel-bookmarks').classList.contains('hidden')) openBookmarks(); if(!document.getElementById('feed-container').classList.contains('hidden')) renderGlobalFeed(); }
+        function openBookmarks() { togglePanel('panel-bookmarks'); const ids = [...bookmarks]; if(ids.length === 0) { document.getElementById('bookmarks-feed').innerHTML = "No bookmarks yet."; return; } document.getElementById('bookmarks-feed').innerHTML = "Loading saved posts..."; bookmarkEvents = []; Object.values(sockets).forEach(ws => { if(ws.readyState === 1) ws.send(JSON.stringify(["REQ", "bookmarks_sub", { kinds: [1], ids: ids }])); }); }
+        function handleBookmarkEvent(ev) { if(bookmarkEvents.some(e => e.id === ev.id)) return; bookmarkEvents.push(ev); bookmarkEvents.sort((a,b) => b.created_at - a.created_at); document.getElementById('bookmarks-feed').innerHTML = bookmarkEvents.map(generatePostHTML).join(''); fetchProfileIfNeeded(ev.pubkey); }
+        
+        // ZAP & NWC
+        function saveNWC() { const uri = document.getElementById('nwc-input').value.trim(); localStorage.setItem('mbit_nwc', uri); nwcString = uri; updateNwcStatus(); alert("Connected!"); }
+        function disconnectNWC() { localStorage.removeItem('mbit_nwc'); nwcString=null; updateNwcStatus(); alert("Disconnected"); }
+        function updateNwcStatus() { const el = document.getElementById('nwc-status'); el.innerText = nwcString ? "Status: CONNECTED via NWC" : "Status: Not Connected"; el.style.color = nwcString ? "#00FF41" : "#F7931A"; }
+        function parseNwcUri(uri) { try { const url = new URL(uri.replace('nostr+walletconnect:', 'https:')); return { pubkey: url.host, relay: url.searchParams.get('relay'), secret: url.searchParams.get('secret') }; } catch(e) { return null; } }
+        
+        function handleZap(lud16, pubkey, eventId) { if (!lud16) return alert("No Lightning Address"); if (!myPubKey) return alert("Login first"); zapContext = { lud16, pubkey, eventId }; document.getElementById('zap-modal').classList.remove('hidden'); }
+        function closeZapModal() { document.getElementById('zap-modal').classList.add('hidden'); zapContext = null; }
+        function setZapAmount(a) { document.getElementById('zap-amt-val').innerText = a; document.getElementById('custom-zap-input').value = a; }
+        function updateZapDisplay(v) { document.getElementById('zap-amt-val').innerText = v || "0"; }
+        
+        async function confirmZap() {
+            const amount = parseInt(document.getElementById('zap-amt-val').innerText);
+            if(!amount) return;
+            const { lud16, pubkey, eventId } = zapContext;
+            const parts = lud16.split('@');
+            try {
+                const res = await fetch(`https://${parts[1]}/.well-known/lnurlp/${parts[0]}`);
+                const data = await res.json();
+                if(data.callback) {
+                    const millisats = amount * 1000;
+                    const zapEvent = { kind: 9734, created_at: Math.floor(Date.now()/1000), tags: [['p', pubkey], ['relays', ...savedRelays], ['amount', millisats.toString()], ['lnurl', data.callback]], content: document.getElementById('zap-comment').value, pubkey: myPubKey };
+                    if(eventId) zapEvent.tags.push(['e', eventId]);
+                    
+                    let signed;
+                    if(authMode==='extension') signed = await window.nostr.signEvent(zapEvent);
+                    else { zapEvent.id = window.NostrTools.getEventHash(zapEvent); zapEvent.sig = window.NostrTools.signEvent(zapEvent, myPrivKey); signed = zapEvent; }
+                    
+                    const cbRes = await fetch(`${data.callback}?amount=${millisats}&nostr=${encodeURI(JSON.stringify(signed))}`);
+                    const cbData = await cbRes.json();
+                    
+                    if(cbData.pr) {
+                        closeZapModal();
+                        if(nwcString) {
+                            const nwc = parseNwcUri(nwcString);
+                            if(nwc) {
+                                const payload = { method: "pay_invoice", params: { invoice: cbData.pr } };
+                                const ciphertext = await window.NostrTools.nip04.encrypt(nwc.secret, nwc.pubkey, JSON.stringify(payload));
+                                const nwcEv = { kind: 23194, content: ciphertext, tags: [['p', nwc.pubkey]], created_at: Math.floor(Date.now()/1000), pubkey: window.NostrTools.getPublicKey(nwc.secret) };
+                                nwcEv.id = window.NostrTools.getEventHash(nwcEv); nwcEv.sig = window.NostrTools.signEvent(nwcEv, nwc.secret);
+                                const r = new WebSocket(nwc.relay);
+                                r.onopen = () => { r.send(JSON.stringify(["EVENT", nwcEv])); alert("Zap Sent via NWC!"); r.close(); };
+                                return;
+                            }
+                        }
+                        window.location.href = `lightning:${cbData.pr}`;
+                    }
+                }
+            } catch(e) { alert("Zap failed"); }
+        }
+
+        // THREAD (SUPER PERMISSIVE)
         function getImmediateParentId(ev) {
             const replyTag = ev.tags.find(t => t[0] === 'e' && t[3] === 'reply');
             if (replyTag) return replyTag[1];
@@ -802,31 +814,13 @@
         function viewThread(id) {
             currentThreadId = id;
             togglePanel('panel-thread');
-            
             document.getElementById('thread-parent-container').innerHTML = ''; 
             document.getElementById('thread-replies-container').innerHTML = '<div style="opacity:0.6; padding:20px; text-align:center;">Loading conversation from relays...</div>';
-            
             threadEvents = [];
+            Object.values(sockets).forEach(ws => { if (ws.readyState === 1) { ws.send(JSON.stringify(["CLOSE", "thread_main"])); ws.send(JSON.stringify(["CLOSE", "thread_children"])); } });
             
-            Object.values(sockets).forEach(ws => {
-                if (ws.readyState === 1) {
-                    ws.send(JSON.stringify(["CLOSE", "thread_main"]));
-                    ws.send(JSON.stringify(["CLOSE", "thread_children"]));
-                }
-            });
-            
-            const cached = events.find(e => e.id === id) || 
-                        notifEvents.find(e => e.id === id) || 
-                        myEvents.find(e => e.id === id) || 
-                        userEvents.find(e => e.id === id) ||
-                        searchEvents.find(e => e.id === id);
-            
-            if (cached) {
-                threadEvents.push(cached);
-                renderThreadView(); 
-                const parentId = getImmediateParentId(cached);
-                if (parentId) fetchNote(parentId);
-            }
+            const cached = events.find(e => e.id === id); 
+            if (cached) { threadEvents.push(cached); renderThreadView(); const pid = getImmediateParentId(cached); if(pid) fetchNote(pid); }
 
             Object.values(sockets).forEach(ws => {
                 if (ws.readyState === 1) {
@@ -845,7 +839,6 @@
             if (threadEvents.some(e => e.id === ev.id)) return;
             threadEvents.push(ev);
             fetchProfileIfNeeded(ev.pubkey);
-            
             if (ev.id !== currentThreadId) {
                 const mainNote = threadEvents.find(e => e.id === currentThreadId);
                 if (mainNote) {
@@ -862,7 +855,6 @@
         function renderThreadView() {
             const mainNote = threadEvents.find(e => e.id === currentThreadId);
             
-            // Render Ancestors
             let parentHtml = '';
             if (mainNote) {
                 const pid = getImmediateParentId(mainNote);
@@ -877,326 +869,13 @@
                 document.getElementById('thread-parent-container').innerHTML = parentHtml + `<div class="thread-parent" style="background:rgba(255,255,255,0.03); border-left:4px solid var(--text-color); padding:15px;">${generatePostHTML(mainNote)}</div>`;
             }
 
-            // Render Replies (Super Permissive)
             const replies = threadEvents.filter(e => e.id !== currentThreadId);
             const ancestorId = mainNote ? getImmediateParentId(mainNote) : null;
             const cleanReplies = replies.filter(e => e.id !== ancestorId);
-
             cleanReplies.sort((a,b) => a.created_at - b.created_at);
-            
-            if (cleanReplies.length > 0) {
-                document.getElementById('thread-replies-container').innerHTML = cleanReplies.map(generatePostHTML).join('');
-            } else {
-                if (mainNote) {
-                    document.getElementById('thread-replies-container').innerHTML = '<div style="opacity:0.5; padding:20px; text-align:center;">No comments found yet.</div>';
-                }
-            }
+            if (cleanReplies.length > 0) document.getElementById('thread-replies-container').innerHTML = cleanReplies.map(generatePostHTML).join('');
+            else if (mainNote) document.getElementById('thread-replies-container').innerHTML = '<div style="opacity:0.5; padding:20px; text-align:center;">No comments found yet.</div>';
         }
-
-        /* --- END THREAD LOGIC --- */
-
-        /* --- SEARCH LOGIC --- */
-        function openSearch() { 
-            togglePanel('panel-search'); 
-            if (!isSearching) {
-                document.getElementById('search-status').innerText = 'UNIVERSAL FEED (LIVE):';
-                renderDiscoveryFeed();
-            }
-        }
-        
-        function clearSearch() {
-            document.getElementById('search-input').value = "";
-            isSearching = false;
-            document.getElementById('search-status').innerText = 'UNIVERSAL FEED (LIVE):';
-            renderDiscoveryFeed();
-        }
-
-        function renderDiscoveryFeed() {
-            document.getElementById('search-results').innerHTML = events.map(generatePostHTML).join('');
-        }
-        
-        function handleSearch() {
-            const term = document.getElementById('search-input').value.trim();
-            if (!term) return;
-            
-            isSearching = true; 
-            document.getElementById('search-status').innerText = 'SEARCH RESULTS:';
-            document.getElementById('search-results').innerHTML = '<div style="padding:10px;text-align:center;opacity:0.6;">Searching decentralized network...</div>';
-            searchEvents = []; 
-            
-            if (term.startsWith('npub1')) {
-                try {
-                    const decoded = window.NostrTools.nip19.decode(term);
-                    const pubkey = decoded.data;
-                    const f1 = { kinds: [0], authors: [pubkey], limit: 1 };
-                    const f2 = { kinds: [1], authors: [pubkey], limit: 20 };
-                    Object.values(sockets).forEach(ws => {
-                         if (ws.readyState === 1) {
-                             ws.send(JSON.stringify(["REQ", "search_sub", f1]));
-                             ws.send(JSON.stringify(["REQ", "search_sub", f2]));
-                         }
-                    });
-                    return;
-                } catch(e) { console.error("Invalid NPUB", e); }
-            }
-
-            const filters = [];
-            if (term.startsWith('#')) {
-                filters.push({ kinds: [1], '#t': [term.substring(1)], limit: 50 });
-            } else {
-                let q = term;
-                if (q.startsWith('@')) q = q.substring(1);
-                filters.push({ kinds: [1], search: q, limit: 20 });
-                filters.push({ kinds: [0], search: q, limit: 10 });
-            }
-
-            Object.values(sockets).forEach(ws => {
-                if (ws.readyState === 1) {
-                    filters.forEach(f => ws.send(JSON.stringify(["REQ", "search_sub", f])));
-                }
-            });
-        }
-
-        function handleSearchEvent(ev) {
-            if (searchEvents.some(e => e.id === ev.id)) return;
-            searchEvents.push(ev);
-            
-            searchEvents.sort((a,b) => {
-                if(a.kind === 0 && b.kind !== 0) return -1;
-                if(b.kind === 0 && a.kind !== 0) return 1;
-                return b.created_at - a.created_at;
-            });
-            
-            document.getElementById('search-results').innerHTML = searchEvents.map(ev => {
-                if(ev.kind === 0) return generateProfileCardHTML(ev);
-                return generatePostHTML(ev);
-            }).join('');
-            
-            if(ev.kind !== 0) fetchProfileIfNeeded(ev.pubkey);
-        }
-
-        function generateProfileCardHTML(ev) {
-            let meta = {};
-            try { meta = JSON.parse(ev.content); } catch(e) {}
-            if(!profiles[ev.pubkey]) initProfileData(ev.pubkey);
-            profiles[ev.pubkey].meta = meta;
-
-            return `
-            <div class="profile-card" onclick="viewProfile('${ev.pubkey}')">
-                ${meta.picture ? `<img src="${meta.picture}">` : '<div style="width:50px;height:50px;background:#222;border-radius:50%;display:flex;align-items:center;justify-content:center;">?</div>'}
-                <div class="info">
-                    <div class="name">${meta.display_name || meta.name || ev.pubkey.substring(0,8)}</div>
-                    ${meta.nip05 ? `<div class="nip05">${meta.nip05}</div>` : ''}
-                    <div class="about">${meta.about || ''}</div>
-                </div>
-                <button class="small act-btn">VIEW</button>
-            </div>`;
-        }
-
-        function openNotifications() { togglePanel('panel-notifications'); refreshNotifications(); }
-        function refreshNotifications() { if (!myPubKey) return document.getElementById('notifications-feed').innerHTML = "Please login."; notifEvents = []; Object.values(sockets).forEach(ws => { if (ws.readyState === 1) ws.send(JSON.stringify(["REQ", "notif_sub", { '#p': [myPubKey], kinds: [1, 9735, 6, 7], limit: 50 }])); }); }
-        function handleNotifEvent(ev) { if (notifEvents.some(e => e.id === ev.id)) return; notifEvents.push(ev); notifEvents.sort((a,b) => b.created_at - a.created_at); renderNotifications(); fetchProfileIfNeeded(ev.pubkey); }
-        function renderNotifications() { document.getElementById('notifications-feed').innerHTML = notifEvents.map(ev => generatePostHTML(ev)).join(''); } 
-        function switchNotifTab(tab) { currentNotifTab = tab; ['ntab-all', 'ntab-zaps', 'ntab-mentions'].forEach(id => document.getElementById(id).classList.remove('active')); document.getElementById('ntab-'+tab).classList.add('active'); renderNotifications(); }
-
-        function initReply(id, pubkey) { if(!myPubKey) return alert("Please Login"); replyContext = { id, pubkey }; document.getElementById('reply-context-bar').classList.remove('hidden'); document.getElementById('reply-text').innerText = `Replying to ${pubkey.substring(0,8)}...`; openComposer(); }
-        function cancelReply() { replyContext = null; document.getElementById('reply-context-bar').classList.add('hidden'); }
-        function initQuote(id) { const note = events.find(e => e.id === id) || myEvents.find(e => e.id === id); if(note) { const encoded = window.NostrTools.nip19.noteEncode(id); document.getElementById('msg-input').value += `\nnostr:${encoded}\n`; openComposer(); } }
-
-        /* --- NWC (WALLET CONNECT) LOGIC --- */
-        function saveNWC() {
-            const uri = document.getElementById('nwc-input').value.trim();
-            if(!uri.startsWith('nostr+walletconnect://')) return alert("Invalid NWC URI");
-            localStorage.setItem('mbit_nwc', uri);
-            nwcString = uri;
-            updateNwcStatus();
-            alert("Wallet Connected!");
-        }
-
-        function disconnectNWC() {
-            localStorage.removeItem('mbit_nwc');
-            nwcString = null;
-            document.getElementById('nwc-input').value = '';
-            updateNwcStatus();
-            alert("Wallet Disconnected");
-        }
-
-        function updateNwcStatus() {
-            const el = document.getElementById('nwc-status');
-            if(nwcString) {
-                el.innerText = "Status: CONNECTED via NWC";
-                el.style.color = "#00FF41";
-            } else {
-                el.innerText = "Status: Not Connected";
-                el.style.color = "#F7931A";
-            }
-        }
-
-        function parseNwcUri(uri) {
-            try {
-                const url = new URL(uri.replace('nostr+walletconnect:', 'https:'));
-                return {
-                    pubkey: url.host,
-                    relay: url.searchParams.get('relay'),
-                    secret: url.searchParams.get('secret')
-                };
-            } catch(e) { return null; }
-        }
-
-        /* --- ZAP LOGIC (Snort Style) --- */
-        let zapContext = null;
-
-        function handleZap(lud16, pubkey, eventId = null) {
-            if (!lud16) return alert("User has no Lightning address set.");
-            if (!myPubKey) return alert("Please Login to Zap.");
-            
-            zapContext = { lud16, pubkey, eventId };
-            
-            // Reset UI
-            document.getElementById('zap-amt-val').innerText = "21";
-            document.getElementById('custom-zap-input').value = "";
-            document.getElementById('zap-comment').value = "";
-            
-            document.getElementById('zap-modal').classList.remove('hidden');
-        }
-
-        function closeZapModal() {
-            document.getElementById('zap-modal').classList.add('hidden');
-            zapContext = null;
-        }
-
-        function setZapAmount(amount) {
-            document.getElementById('zap-amt-val').innerText = amount;
-            document.getElementById('custom-zap-input').value = amount;
-        }
-
-        function updateZapDisplay(val) {
-            if(!val) val = "0";
-            document.getElementById('zap-amt-val').innerText = val;
-        }
-
-        async function confirmZap() {
-            const amount = parseInt(document.getElementById('zap-amt-val').innerText);
-            const comment = document.getElementById('zap-comment').value;
-            
-            if (!amount || amount <= 0) return alert("Invalid amount");
-            if (!zapContext) return;
-
-            const { lud16, pubkey, eventId } = zapContext;
-            const parts = lud16.split('@');
-            if (parts.length !== 2) return alert("Invalid LUD16");
-
-            const btn = document.querySelector('#zap-modal .zap-active');
-            const oldText = btn.innerText;
-            btn.innerText = "Processing...";
-            btn.disabled = true;
-
-            try {
-                // A. Get LNURL Data
-                const url = `https://${parts[1]}/.well-known/lnurlp/${parts[0]}`;
-                const res = await fetch(url);
-                const data = await res.json();
-
-                if (data.callback) {
-                    const millisats = amount * 1000;
-                    if (millisats < data.minSendable || millisats > data.maxSendable) {
-                        alert(`Amount out of range.`);
-                        throw new Error("Range error");
-                    }
-
-                    // B. Create Zap Request Event
-                    let zapTags = [
-                        ['p', pubkey],
-                        ['relays', ...savedRelays],
-                        ['amount', millisats.toString()],
-                        ['lnurl', data.callback]
-                    ];
-                    if (eventId) zapTags.push(['e', eventId]);
-
-                    const zapEvent = {
-                        kind: 9734,
-                        created_at: Math.floor(Date.now() / 1000),
-                        tags: zapTags,
-                        content: comment,
-                        pubkey: myPubKey
-                    };
-
-                    // C. Sign Request
-                    let signedEvent;
-                    if (authMode === 'extension') {
-                        signedEvent = await window.nostr.signEvent(zapEvent);
-                    } else {
-                        zapEvent.id = window.NostrTools.getEventHash(zapEvent);
-                        zapEvent.sig = window.NostrTools.signEvent(zapEvent, myPrivKey);
-                        signedEvent = zapEvent;
-                    }
-
-                    // D. Get Invoice
-                    const encodedEvent = encodeURI(JSON.stringify(signedEvent));
-                    const cbUrl = `${data.callback}?amount=${millisats}&nostr=${encodedEvent}`;
-                    const cbRes = await fetch(cbUrl);
-                    const cbData = await cbRes.json();
-
-                    if (cbData.pr) {
-                        closeZapModal();
-                        
-                        // ** NWC CHECK **
-                        if (nwcString) {
-                            // Pay via NWC
-                            const nwc = parseNwcUri(nwcString);
-                            if(nwc) {
-                                btn.innerText = "Paying via NWC...";
-                                try {
-                                    const payload = {
-                                        method: "pay_invoice",
-                                        params: { invoice: cbData.pr }
-                                    };
-                                    
-                                    // Encrypt payload
-                                    const ciphertext = await window.NostrTools.nip04.encrypt(nwc.secret, nwc.pubkey, JSON.stringify(payload));
-                                    
-                                    // Create NWC Request Event (Kind 23194)
-                                    const nwcEvent = {
-                                        kind: 23194,
-                                        content: ciphertext,
-                                        tags: [['p', nwc.pubkey]],
-                                        created_at: Math.floor(Date.now() / 1000),
-                                        pubkey: window.NostrTools.getPublicKey(nwc.secret)
-                                    };
-                                    
-                                    nwcEvent.id = window.NostrTools.getEventHash(nwcEvent);
-                                    nwcEvent.sig = window.NostrTools.signEvent(nwcEvent, nwc.secret);
-                                    
-                                    // Publish to NWC Relay
-                                    const relay = new WebSocket(nwc.relay);
-                                    relay.onopen = () => {
-                                        relay.send(JSON.stringify(["EVENT", nwcEvent]));
-                                        alert("Zap sent via NWC! ⚡");
-                                        relay.close();
-                                    };
-                                    return; // Stop here, payment handled
-                                } catch(e) {
-                                    console.error(e);
-                                    alert("NWC Error. Opening wallet instead.");
-                                }
-                            }
-                        }
-
-                        // Fallback to manual wallet
-                        window.location.href = `lightning:${cbData.pr}`;
-                    } else {
-                        alert("Invoice generation failed: " + (cbData.reason || "Unknown"));
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-                alert("Zap failed.");
-            } finally {
-                btn.innerText = oldText;
-                btn.disabled = false;
-            }
-        }
-        /* --- END ZAP LOGIC --- */
 
         function processEventStats(ev) { if (!ev || !ev.tags) return; const eTags = ev.tags.filter(t => t[0] === 'e'); eTags.forEach(t => { const targetId = t[1]; if (!eventStats[targetId]) eventStats[targetId] = { reply:0, repost:0, like:0, zap:0 }; if (ev.kind === 1) eventStats[targetId].reply++; if (ev.kind === 6) eventStats[targetId].repost++; if (ev.kind === 7) eventStats[targetId].like++; if (ev.kind === 9735) eventStats[targetId].zap++; updateCountDOM(targetId, 'reply'); updateCountDOM(targetId, 'repost'); updateCountDOM(targetId, 'like'); updateCountDOM(targetId, 'zap'); }); }
         function updateCountDOM(id, type) { const el = document.getElementById(`s-${type}-${id}`); if (el && eventStats[id]) { el.innerText = eventStats[id][type]; } }
@@ -1225,7 +904,7 @@
         // IMMEDIATE RENDER CALL
         renderRelays(); 
         
-        savedRelays.forEach(url => connectToRelay(url)); // FIXED ARROW FUNCTION
+        savedRelays.forEach(connectToRelay);
         goHome();
     </script>
 </body>
