@@ -474,7 +474,7 @@
     </div>
 
     <script>
-        const defaultRelays = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://relay.mostr.pub', 'wss://relay.nostr.band'];
+        const defaultRelays = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://relay.mostr.pub', 'wss://trending.relays.land'];
         
         let savedRelays;
         try { savedRelays = JSON.parse(localStorage.getItem('mbit_relays')) || defaultRelays; } catch(e) { savedRelays = defaultRelays; }
