@@ -240,8 +240,7 @@
     <header>
         <h1>mBIT</h1>
         <div class="nav-bar">
-            <span class="nav-item" onclick="goHome()">#FEED</span>
-            <span>|</span>
+            <!-- Removed #FEED from here as requested -->
             <span class="nav-item" onclick="togglePanel('panel-identity')">#LOG IN</span>
             <span>|</span>
             <span class="nav-item" onclick="togglePanel('panel-my-profile')">#MY PROFILE</span>
@@ -407,6 +406,13 @@
         <!-- MAIN FEED STUFF -->
         <div id="feed-container">
             <div id="new-btn" class="hidden" onclick="mergeQueue()">>> LOAD NEW SIGNALS <<</div>
+            
+            <!-- NEW TABBED FEED INTERFACE -->
+            <div class="profile-subnav" style="margin-bottom: 20px;">
+                <button id="ftab-following" class="subnav-btn" onclick="switchFeedTab('following')">NOTES</button>
+                <button id="ftab-trending" class="subnav-btn active" onclick="switchFeedTab('trending')">TRENDING</button>
+            </div>
+
             <div id="feed"></div>
         </div>
     </div>
@@ -507,6 +513,9 @@
         let currentUserTab = 'notes'; 
         let currentMyTab = 'notes';
         let currentNotifTab = 'all';
+        
+        // New State for Feed Tabs
+        let currentFeedTab = 'trending'; 
 
         // Init Theme
         function changeTheme(theme) {
@@ -536,6 +545,7 @@
             window.scrollTo({ top: 0, behavior: 'smooth' });
             currentViewedProfile = null;
             currentThreadId = null;
+            renderGlobalFeed(); // Ensure correct tab is rendered
         }
 
         function togglePanel(id) {
@@ -564,13 +574,11 @@
             currentThreadId = id;
             togglePanel('panel-thread');
             
-            // Reset UI
             document.getElementById('thread-parent-container').innerHTML = ''; 
             document.getElementById('thread-replies-container').innerHTML = '<div style="opacity:0.6; padding:20px; text-align:center;">Loading conversation from relays...</div>';
             
             threadEvents = [];
             
-            // Close old subs to prevent mixing threads
             Object.values(sockets).forEach(ws => {
                 if (ws.readyState === 1) {
                     ws.send(JSON.stringify(["CLOSE", "thread_main"]));
@@ -578,7 +586,6 @@
                 }
             });
             
-            // 1. Load Main Note from Cache if available
             const cached = events.find(e => e.id === id) || 
                         notifEvents.find(e => e.id === id) || 
                         myEvents.find(e => e.id === id) || 
@@ -592,13 +599,9 @@
                 if (parentId) fetchNote(parentId);
             }
 
-            // 2. Request from Relays
             Object.values(sockets).forEach(ws => {
                 if (ws.readyState === 1) {
-                    // Get the main note again (in case we missed it or need fresh data)
                     ws.send(JSON.stringify(["REQ", "thread_main", { kinds: [1], ids: [id], limit: 1 }]));
-                    
-                    // Get REPLIES. We ask for any note that tags this ID.
                     ws.send(JSON.stringify(["REQ", "thread_children", { kinds: [1], '#e': [id], limit: 300 }]));
                 }
             });
@@ -612,13 +615,11 @@
         }
 
         function handleThreadEvent(ev) {
-            // Prevent duplicates
             if (threadEvents.some(e => e.id === ev.id)) return;
             
             threadEvents.push(ev);
             fetchProfileIfNeeded(ev.pubkey);
             
-            // If this is an ancestor (parent), we might need to fetch its parent too
             if (ev.id !== currentThreadId) {
                 const mainNote = threadEvents.find(e => e.id === currentThreadId);
                 if (mainNote) {
@@ -636,7 +637,6 @@
         function renderThreadView() {
             const mainNote = threadEvents.find(e => e.id === currentThreadId);
             
-            // --- RENDER ANCESTORS ---
             let parentHtml = '';
             if (mainNote) {
                 const pid = getImmediateParentId(mainNote);
@@ -661,13 +661,7 @@
                     </div>`;
             }
 
-            // --- RENDER REPLIES (SUPER PERMISSIVE) ---
-            // If it's in the array and it's not the main note, IT IS A REPLY.
-            // We trust the relay subscription to have only sent relevant notes.
             const replies = threadEvents.filter(e => e.id !== currentThreadId);
-            
-            // Filter out ancestors from the replies list to avoid duplication
-            // (An ancestor is a note that the Main Note replies to. We displayed it above, don't display it below)
             const ancestorId = mainNote ? getImmediateParentId(mainNote) : null;
             const cleanReplies = replies.filter(e => e.id !== ancestorId);
 
@@ -677,7 +671,6 @@
                 document.getElementById('thread-replies-container').innerHTML = cleanReplies.map(generatePostHTML).join('');
             } else {
                 if (mainNote) {
-                    // Only show empty message if main note is loaded (otherwise we are still initializing)
                     document.getElementById('thread-replies-container').innerHTML = '<div style="opacity:0.5; padding:20px; text-align:center;">No comments found yet.</div>';
                 }
             }
@@ -834,82 +827,31 @@
             if (list.length === 0) { document.getElementById('notifications-feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">No notifications found.</div>'; return; }
             
             document.getElementById('notifications-feed').innerHTML = list.map(ev => {
-                // 1. ZAPS (Kind 9735)
                 if (ev.kind === 9735) {
                      let senderPubkey = ev.pubkey;
                      let amountSats = 0;
                      let targetId = null;
-                     
                      const eTag = ev.tags.find(t => t[0] === 'e');
                      if (eTag) targetId = eTag[1];
-
                      const descTag = ev.tags.find(t => t[0] === 'description');
-                     if (descTag) {
-                        try {
-                            const request = JSON.parse(descTag[1]);
-                            senderPubkey = request.pubkey;
-                            const amountTag = request.tags.find(t => t[0] === 'amount');
-                            if(amountTag) amountSats = Math.floor(parseInt(amountTag[1]) / 1000);
-                        } catch(e) {}
-                     }
-
+                     if (descTag) { try { const request = JSON.parse(descTag[1]); senderPubkey = request.pubkey; const amountTag = request.tags.find(t => t[0] === 'amount'); if(amountTag) amountSats = Math.floor(parseInt(amountTag[1]) / 1000); } catch(e) {} }
                      const p = (profiles[senderPubkey] && profiles[senderPubkey].meta) ? profiles[senderPubkey].meta : {name: senderPubkey.substring(0,6)};
                      const snippet = targetId ? findTargetContent(targetId) : null;
-
-                     return `
-                     <div class="notif-item" onclick="${targetId ? `viewThread('${targetId}')` : ''}" style="cursor:pointer;">
-                        ${p.picture ? `<img src="${p.picture}" class="avatar" style="margin-right:15px;">` : '<span class="notif-icon" style="color:#F7931A;">⚡</span>'}
-                        <div style="flex-grow:1;">
-                            <div style="font-weight:bold; color:#F7931A; font-size:1.1em;">+${amountSats} sats</div>
-                            <div style="font-size:0.9em;">
-                                from <span style="font-weight:bold; color:var(--text-color);">${p.name || senderPubkey.substring(0,6)}</span>
-                            </div>
-                            ${snippet ? `<div style="margin-top:5px; padding-left:10px; border-left:3px solid #333; font-style:italic; opacity:0.8; font-size:0.8em;">"${snippet}"</div>` : ''}
-                        </div>
-                     </div>`;
+                     return `<div class="notif-item" onclick="${targetId ? `viewThread('${targetId}')` : ''}" style="cursor:pointer;">${p.picture ? `<img src="${p.picture}" class="avatar" style="margin-right:15px;">` : '<span class="notif-icon" style="color:#F7931A;">⚡</span>'}<div style="flex-grow:1;"><div style="font-weight:bold; color:#F7931A; font-size:1.1em;">+${amountSats} sats</div><div style="font-size:0.9em;">from <span style="font-weight:bold; color:var(--text-color);">${p.name || senderPubkey.substring(0,6)}</span></div>${snippet ? `<div style="margin-top:5px; padding-left:10px; border-left:3px solid #333; font-style:italic; opacity:0.8; font-size:0.8em;">"${snippet}"</div>` : ''}</div></div>`;
                 }
-
-                // 2. LIKES (Kind 7)
                 if (ev.kind === 7) {
                     const p = (profiles[ev.pubkey] && profiles[ev.pubkey].meta) ? profiles[ev.pubkey].meta : {name: ev.pubkey.substring(0,6)};
                     const targetId = ev.tags.find(t => t[0] === 'e')?.[1];
                     const snippet = targetId ? findTargetContent(targetId) : null;
-                    
-                    return `
-                    <div class="notif-item" onclick="${targetId ? `viewThread('${targetId}')` : ''}" style="cursor:pointer;">
-                        <div style="font-size:1.5em; margin-right:15px; color:#e0245e;">❤</div>
-                        <div style="flex-grow:1;">
-                            <div style="font-size:0.9em;">
-                                <span style="font-weight:bold;">${p.name || ev.pubkey.substring(0,6)}</span> liked your note.
-                            </div>
-                            ${snippet ? `<div style="margin-top:5px; padding-left:10px; border-left:3px solid #333; font-style:italic; opacity:0.8; font-size:0.8em;">"${snippet}"</div>` : ''}
-                        </div>
-                    </div>`;
+                    return `<div class="notif-item" onclick="${targetId ? `viewThread('${targetId}')` : ''}" style="cursor:pointer;"><div style="font-size:1.5em; margin-right:15px; color:#e0245e;">❤</div><div style="flex-grow:1;"><div style="font-size:0.9em;"><span style="font-weight:bold;">${p.name || ev.pubkey.substring(0,6)}</span> liked your note.</div>${snippet ? `<div style="margin-top:5px; padding-left:10px; border-left:3px solid #333; font-style:italic; opacity:0.8; font-size:0.8em;">"${snippet}"</div>` : ''}</div></div>`;
                 }
-
-                // 3. REPOSTS (Kind 6)
                 if (ev.kind === 6) {
                     const p = (profiles[ev.pubkey] && profiles[ev.pubkey].meta) ? profiles[ev.pubkey].meta : {name: ev.pubkey.substring(0,6)};
                     const targetId = ev.tags.find(t => t[0] === 'e')?.[1];
                     const snippet = targetId ? findTargetContent(targetId) : null;
-                    
-                    return `
-                    <div class="notif-item" onclick="${targetId ? `viewThread('${targetId}')` : ''}" style="cursor:pointer;">
-                        <div style="font-size:1.5em; margin-right:15px; color:#17bf63;">↻</div>
-                        <div style="flex-grow:1;">
-                            <div style="font-size:0.9em;">
-                                <span style="font-weight:bold;">${p.name || ev.pubkey.substring(0,6)}</span> reposted your note.
-                            </div>
-                            ${snippet ? `<div style="margin-top:5px; padding-left:10px; border-left:3px solid #333; font-style:italic; opacity:0.8; font-size:0.8em;">"${snippet}"</div>` : ''}
-                        </div>
-                    </div>`;
+                    return `<div class="notif-item" onclick="${targetId ? `viewThread('${targetId}')` : ''}" style="cursor:pointer;"><div style="font-size:1.5em; margin-right:15px; color:#17bf63;">↻</div><div style="flex-grow:1;"><div style="font-size:0.9em;"><span style="font-weight:bold;">${p.name || ev.pubkey.substring(0,6)}</span> reposted your note.</div>${snippet ? `<div style="margin-top:5px; padding-left:10px; border-left:3px solid #333; font-style:italic; opacity:0.8; font-size:0.8em;">"${snippet}"</div>` : ''}</div></div>`;
                 }
-
-                // 4. REPLIES (Kind 1)
-                return `<div style="border-bottom: 1px solid var(--post-border); padding-bottom: 15px; margin-bottom: 15px;">
-                    <div style="font-size: 0.75em; opacity: 0.7; margin-bottom: 8px;">💬 Reply to your note:</div>
-                    ${generatePostHTML(ev)}
-                </div>`;
+                return `<div style="border-bottom: 1px solid var(--post-border); padding-bottom: 15px; margin-bottom: 15px;"><div style="font-size: 0.75em; opacity: 0.7; margin-bottom: 8px;">💬 Reply to your note:</div>${generatePostHTML(ev)}</div>`;
             }).join('');
         }
 
@@ -1176,13 +1118,13 @@
                         processEventStats(ev); 
                         if (subId === 'my_meta' || subId === 'user_meta') processProfileEvent(ev, subId === 'my_meta');
                         if (subId === 'my_followers' || subId === 'user_followers') processProfileEvent(ev, subId === 'my_followers'); 
-                        if (subId === 'g') handleGlobalEvent(ev);
+                        if (subId === 'g') handleGlobalEvent(ev, url); // Changed signature
                         if (subId === 'sub_me') handleMyEvent(ev);
                         if (subId === 'sub_user') handleUserEvent(ev);
                         if (subId === 'search_sub') handleSearchEvent(ev);
                         if (subId === 'notif_sub') handleNotifEvent(ev);
                         
-                        // Handle Thread Events (Main, Children, Ancestors)
+                        // Handle Thread Events
                         if (subId === 'thread_main' || subId === 'thread_children' || subId.startsWith('thread_ancestor')) {
                             handleThreadEvent(ev);
                         }
@@ -1195,7 +1137,28 @@
         }
         
         function handleContacts(ev) { if(ev.kind===3) { const pTags = ev.tags.filter(t=>t[0]==='p').map(t=>t[1]); myContacts = new Set(pTags); if(currentViewedProfile) renderUserProfileHeader(currentViewedProfile); } }
-        function handleGlobalEvent(ev) { if(processedIds.has(ev.id)) return; processedIds.add(ev.id); fetchProfileIfNeeded(ev.pubkey); incomingBuffer.push(ev); }
+        
+        function handleGlobalEvent(ev, sourceRelay) { 
+            // Mark relay source for filtering
+            ev._relay = sourceRelay;
+            
+            // Special handling for trending relay: even if duplicate, we need to mark existing event as trending
+            const isTrendingSource = sourceRelay === 'wss://trending.relays.land';
+            
+            if(processedIds.has(ev.id)) {
+                if (isTrendingSource) {
+                    const existing = events.find(e => e.id === ev.id);
+                    if (existing) existing._isTrending = true;
+                }
+                return; 
+            }
+            
+            if (isTrendingSource) ev._isTrending = true;
+            
+            processedIds.add(ev.id); 
+            fetchProfileIfNeeded(ev.pubkey); 
+            incomingBuffer.push(ev); 
+        }
         
         setInterval(() => { 
             if(incomingBuffer.length===0) return; 
@@ -1228,7 +1191,37 @@
             window.scrollTo(0,0); 
         }
 
-        function renderGlobalFeed() { document.getElementById('feed').innerHTML = events.map(generatePostHTML).join(''); }
+        // NEW FEED RENDER LOGIC
+        function switchFeedTab(tab) {
+            currentFeedTab = tab;
+            ['ftab-following', 'ftab-trending'].forEach(id => document.getElementById(id).classList.remove('active'));
+            document.getElementById('ftab-'+tab).classList.add('active');
+            renderGlobalFeed();
+        }
+
+        function renderGlobalFeed() { 
+            let list = events;
+            
+            if (currentFeedTab === 'following') {
+                // Filter: Must be in my contact list
+                if (myContacts.size > 0) {
+                    list = events.filter(ev => myContacts.has(ev.pubkey));
+                } else {
+                    // If no contacts or not logged in, show helpful message
+                    document.getElementById('feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Login and follow people to see notes here.<br>Switch to TRENDING to see content now.</div>';
+                    return;
+                }
+            } else {
+                // TRENDING: Show events marked as trending
+                list = events.filter(ev => ev._isTrending === true);
+            }
+
+            if (list.length === 0) {
+                document.getElementById('feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">Waiting for signals...</div>';
+            } else {
+                document.getElementById('feed').innerHTML = list.map(generatePostHTML).join('');
+            }
+        }
         
         async function toggleFollow(pubkey) { if(!myPubKey) return alert("Login required"); if(myContacts.has(pubkey)) myContacts.delete(pubkey); else myContacts.add(pubkey); renderUserProfileHeader(pubkey); const tags = Array.from(myContacts).map(p => ['p', p]); const event = { kind: 3, created_at: Math.floor(Date.now()/1000), tags: tags, content: "", pubkey: myPubKey }; await signAndBroadcast(event); }
         async function signAndBroadcast(event) { if (authMode === 'extension') event = await window.nostr.signEvent(event); else { event.id = window.NostrTools.getEventHash(event); event.sig = window.NostrTools.signEvent(event, myPrivKey); } Object.values(sockets).forEach(ws => { if(ws.readyState === 1) ws.send(JSON.stringify(["EVENT", event])); }); return event; }
