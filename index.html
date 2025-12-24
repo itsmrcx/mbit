@@ -480,7 +480,14 @@
     </div>
 
     <script>
-        const defaultRelays = ['wss://relay.damus.io', 'wss://relay.primal.net', 'wss://nos.lol', 'wss://relay.mostr.pub', 'wss://trending.relays.land'];
+        const defaultRelays = [
+            'wss://relay.damus.io', 
+            'wss://relay.primal.net', 
+            'wss://nos.lol', 
+            'wss://relay.mostr.pub', 
+            'wss://trending.relays.land',
+            'wss://cache1.primal.net' 
+        ];
         
         let savedRelays;
         try { savedRelays = JSON.parse(localStorage.getItem('mbit_relays')) || defaultRelays; } catch(e) { savedRelays = defaultRelays; }
@@ -1141,7 +1148,8 @@
         function handleGlobalEvent(ev, sourceRelay) {
             // Mark relay source for filtering
             ev._relay = sourceRelay;
-            const isTrendingSource = sourceRelay === 'wss://trending.relays.land';
+            // UPDATE: Include Primal Cache as a Trending Source
+            const isTrendingSource = sourceRelay === 'wss://trending.relays.land' || sourceRelay === 'wss://cache1.primal.net';
 
             if (processedIds.has(ev.id)) {
                 if (isTrendingSource) {
