@@ -258,6 +258,10 @@
                 <input type="text" id="new-relay" placeholder="wss://..." style="margin-bottom:0; width: 80%;">
                 <button onclick="addRelay()" style="width: 18%; margin-left: 2%;">ADD</button>
             </div>
+            
+            <hr style="border:0; border-top:1px dashed var(--post-border); margin: 20px 0;">
+            <button onclick="reconnectRelays()" style="width:100%;" class="secondary">↻ RECONNECT ALL</button>
+            
             <br><button class="small secondary" onclick="goHome()">CLOSE</button>
         </div>
 
@@ -797,6 +801,22 @@
             });
         }
 
+        // Helper to extract sats from Zap Receipt
+        function parseZapAmount(ev) {
+            try {
+                // NIP-57: Description tag contains the JSON of the zap request
+                const descTag = ev.tags.find(t => t[0] === 'description');
+                if (descTag) {
+                    const request = JSON.parse(descTag[1]);
+                    const amountTag = request.tags.find(t => t[0] === 'amount');
+                    if (amountTag) {
+                        return Math.floor(parseInt(amountTag[1]) / 1000); // millisats to sats
+                    }
+                }
+            } catch(e) { }
+            return 0;
+        }
+
         function handleNotifEvent(ev) {
             if (notifEvents.some(e => e.id === ev.id)) return;
             if (ev.kind === 9735) {
@@ -835,16 +855,28 @@
             
             document.getElementById('notifications-feed').innerHTML = list.map(ev => {
                 if (ev.kind === 9735) {
-                     let senderPubkey = ev.pubkey;
-                     let amountSats = 0;
+                     let senderPubkey = ev.pubkey; // default to relayer
+                     
+                     // Get amount
+                     let amountSats = parseZapAmount(ev);
+
                      let targetId = null;
                      const eTag = ev.tags.find(t => t[0] === 'e');
                      if (eTag) targetId = eTag[1];
+                     
+                     // Get sender from Zap Request
                      const descTag = ev.tags.find(t => t[0] === 'description');
-                     if (descTag) { try { const request = JSON.parse(descTag[1]); senderPubkey = request.pubkey; const amountTag = request.tags.find(t => t[0] === 'amount'); if(amountTag) amountSats = Math.floor(parseInt(amountTag[1]) / 1000); } catch(e) {} }
+                     if (descTag) { 
+                        try { 
+                            const request = JSON.parse(descTag[1]); 
+                            senderPubkey = request.pubkey; 
+                        } catch(e) {} 
+                     }
+                     
                      const p = (profiles[senderPubkey] && profiles[senderPubkey].meta) ? profiles[senderPubkey].meta : {name: senderPubkey.substring(0,6)};
                      const snippet = targetId ? findTargetContent(targetId) : null;
-                     return `<div class="notif-item" onclick="${targetId ? `viewThread('${targetId}')` : ''}" style="cursor:pointer;">${p.picture ? `<img src="${p.picture}" class="avatar" style="margin-right:15px;">` : '<span class="notif-icon" style="color:#F7931A;">⚡</span>'}<div style="flex-grow:1;"><div style="font-weight:bold; color:#F7931A; font-size:1.1em;">+${amountSats} sats</div><div style="font-size:0.9em;">from <span style="font-weight:bold; color:var(--text-color);">${p.name || senderPubkey.substring(0,6)}</span></div>${snippet ? `<div style="margin-top:5px; padding-left:10px; border-left:3px solid #333; font-style:italic; opacity:0.8; font-size:0.8em;">"${snippet}"</div>` : ''}</div></div>`;
+                     
+                     return `<div class="notif-item" onclick="${targetId ? `viewThread('${targetId}')` : ''}" style="cursor:pointer;">${p.picture ? `<img src="${p.picture}" class="avatar" style="margin-right:15px;">` : '<span class="notif-icon" style="color:#F7931A;">⚡</span>'}<div style="flex-grow:1;"><div style="font-weight:bold; color:#F7931A; font-size:1.1em;">+${formatSats(amountSats)}</div><div style="font-size:0.9em;">from <span style="font-weight:bold; color:var(--text-color);">${p.name || senderPubkey.substring(0,6)}</span></div>${snippet ? `<div style="margin-top:5px; padding-left:10px; border-left:3px solid #333; font-style:italic; opacity:0.8; font-size:0.8em;">"${snippet}"</div>` : ''}</div></div>`;
                 }
                 if (ev.kind === 7) {
                     const p = (profiles[ev.pubkey] && profiles[ev.pubkey].meta) ? profiles[ev.pubkey].meta : {name: ev.pubkey.substring(0,6)};
@@ -1272,6 +1304,16 @@
         function toggleSecret() { const el = document.getElementById('display-nsec'); el.type = el.type === "password" ? "text" : "password"; }
         function fetchProfile(pubkey) { Object.values(sockets).forEach(ws => ws.send(JSON.stringify(["REQ", "m_"+pubkey.substring(0,8), { kinds: [0], authors: [pubkey], limit: 1 }]))); }
 
+        function reconnectRelays() {
+            Object.values(sockets).forEach(ws => {
+                if(ws) ws.close();
+            });
+            renderRelays(); // Update UI to show off temporarily
+            setTimeout(() => {
+                savedRelays.forEach(connectToRelay);
+            }, 500);
+        }
+
         async function loginExtension() {
             if (typeof window.nostr === 'undefined') { await new Promise(r => setTimeout(r, 500)); if (typeof window.nostr === 'undefined') return alert("No Nostr extension found (Alby, nos2x, etc)."); }
             try { const pubkey = await window.nostr.getPublicKey(); localStorage.setItem('nostr_pubkey', pubkey); localStorage.setItem('nostr_mode', 'extension'); location.reload(); } catch (err) { alert("Login failed or cancelled."); }
@@ -1486,9 +1528,53 @@
         }
         /* --- END ZAP LOGIC --- */
 
-        function processEventStats(ev) { if (!ev || !ev.tags) return; const eTags = ev.tags.filter(t => t[0] === 'e'); eTags.forEach(t => { const targetId = t[1]; if (!eventStats[targetId]) eventStats[targetId] = { reply:0, repost:0, like:0, zap:0 }; if (ev.kind === 1) eventStats[targetId].reply++; if (ev.kind === 6) eventStats[targetId].repost++; if (ev.kind === 7) eventStats[targetId].like++; if (ev.kind === 9735) eventStats[targetId].zap++; updateCountDOM(targetId, 'reply'); updateCountDOM(targetId, 'repost'); updateCountDOM(targetId, 'like'); updateCountDOM(targetId, 'zap'); }); }
-        function updateCountDOM(id, type) { const el = document.getElementById(`s-${type}-${id}`); if (el && eventStats[id]) { el.innerText = eventStats[id][type]; } }
-        async function doLike(id, pubkey) { if(!myPubKey) return alert("Login first"); likedPosts.add(id); localStorage.setItem('mbit_likes', JSON.stringify([...likedPosts])); if(!eventStats[id]) eventStats[id] = { reply:0, repost:0, like:0, zap:0 }; eventStats[id].like++; updateCountDOM(id, 'like'); if(!document.getElementById('feed-container').classList.contains('hidden')) renderGlobalFeed(); if(!document.getElementById('panel-thread').classList.contains('hidden')) viewThread(currentThreadId); const event = { kind: 7, created_at: Math.floor(Date.now()/1000), tags: [['e', id], ['p', pubkey]], content: "+", pubkey: myPubKey }; await signAndBroadcast(event); }
+        function processEventStats(ev) { 
+            if (!ev || !ev.tags) return; 
+            const eTags = ev.tags.filter(t => t[0] === 'e'); 
+            
+            // Extract Zap Amount if it's a zap
+            let zapSats = 0;
+            if(ev.kind === 9735) zapSats = parseZapAmount(ev);
+
+            eTags.forEach(t => { 
+                const targetId = t[1]; 
+                if (!eventStats[targetId]) eventStats[targetId] = { reply:0, repost:0, like:0, zap:0, zapAmount: 0 }; 
+                
+                if (ev.kind === 1) eventStats[targetId].reply++; 
+                if (ev.kind === 6) eventStats[targetId].repost++; 
+                if (ev.kind === 7) eventStats[targetId].like++; 
+                if (ev.kind === 9735) {
+                    eventStats[targetId].zap++; 
+                    eventStats[targetId].zapAmount += zapSats;
+                }
+
+                updateCountDOM(targetId, 'reply'); 
+                updateCountDOM(targetId, 'repost'); 
+                updateCountDOM(targetId, 'like'); 
+                updateCountDOM(targetId, 'zap'); 
+            }); 
+        }
+
+        function formatSats(sats) {
+            if (sats >= 1000000) return (sats / 1000000).toFixed(1) + 'M';
+            if (sats >= 1000) return (sats / 1000).toFixed(1) + 'k';
+            return sats;
+        }
+
+        function updateCountDOM(id, type) { 
+            const el = document.getElementById(`s-${type}-${id}`); 
+            if (el && eventStats[id]) { 
+                if (type === 'zap') {
+                    // Show amount if > 0, else count, else 0
+                    const amt = eventStats[id].zapAmount;
+                    el.innerText = amt > 0 ? formatSats(amt) : eventStats[id].zap;
+                } else {
+                    el.innerText = eventStats[id][type]; 
+                }
+            } 
+        }
+
+        async function doLike(id, pubkey) { if(!myPubKey) return alert("Login first"); likedPosts.add(id); localStorage.setItem('mbit_likes', JSON.stringify([...likedPosts])); if(!eventStats[id]) eventStats[id] = { reply:0, repost:0, like:0, zap:0, zapAmount: 0 }; eventStats[id].like++; updateCountDOM(id, 'like'); if(!document.getElementById('feed-container').classList.contains('hidden')) renderGlobalFeed(); if(!document.getElementById('panel-thread').classList.contains('hidden')) viewThread(currentThreadId); const event = { kind: 7, created_at: Math.floor(Date.now()/1000), tags: [['e', id], ['p', pubkey]], content: "+", pubkey: myPubKey }; await signAndBroadcast(event); }
 
         function generatePostHTML(ev) { 
             if (isBlocked(ev)) return ''; 
@@ -1496,8 +1582,12 @@
             let content = ev.content; if (ev.kind === 6) try { content = JSON.parse(ev.content).content || "[Repost]"; } catch(e) { content = "[Repost]"; } 
             const likeClass = likedPosts.has(ev.id) ? 'act-btn active' : 'act-btn'; 
             const bookmarkClass = bookmarks.has(ev.id) ? 'act-btn bookmark-btn active' : 'act-btn bookmark-btn'; 
-            const s = eventStats[ev.id] || { reply:0, repost:0, like:0, zap:0 }; 
-            return `<div class="post"> <div class="meta" onclick="viewProfile('${ev.pubkey}')"> ${p.picture?`<img src="${p.picture}" class="avatar">`:''} <span class="username-link">${p.display_name || p.name || ev.pubkey.substring(0,6)}</span> <span style="margin-left:5px; opacity:0.5;">• ${new Date(ev.created_at*1000).toLocaleTimeString()}</span> </div> <div class="content" onclick="viewThread('${ev.id}')">${parseContent(content)}</div> <div class="actions"> <button class="act-btn" onclick="initReply('${ev.id}', '${ev.pubkey}')">#REPLY <span id="s-reply-${ev.id}">${s.reply}</span></button> <button class="act-btn" onclick="initQuote('${ev.id}')">#SHARE <span id="s-repost-${ev.id}">${s.repost}</span></button> <button class="${likeClass} act-btn" onclick="doLike('${ev.id}', '${ev.pubkey}')">#LIKE <span id="s-like-${ev.id}">${s.like}</span></button> <button class="act-btn zap-btn" onclick="handleZap('${p.lud16}', '${ev.pubkey}', '${ev.id}')">#ZAP ⚡ <span id="s-zap-${ev.id}">${s.zap}</span></button> <button class="${bookmarkClass}" onclick="doBookmark('${ev.id}')">#MARK</button> </div> </div>`; 
+            const s = eventStats[ev.id] || { reply:0, repost:0, like:0, zap:0, zapAmount: 0 }; 
+            
+            // Format Zap Label (Amount if available, else count)
+            const zapLabel = s.zapAmount > 0 ? formatSats(s.zapAmount) : s.zap;
+
+            return `<div class="post"> <div class="meta" onclick="viewProfile('${ev.pubkey}')"> ${p.picture?`<img src="${p.picture}" class="avatar">`:''} <span class="username-link">${p.display_name || p.name || ev.pubkey.substring(0,6)}</span> <span style="margin-left:5px; opacity:0.5;">• ${new Date(ev.created_at*1000).toLocaleTimeString()}</span> </div> <div class="content" onclick="viewThread('${ev.id}')">${parseContent(content)}</div> <div class="actions"> <button class="act-btn" onclick="initReply('${ev.id}', '${ev.pubkey}')">#REPLY <span id="s-reply-${ev.id}">${s.reply}</span></button> <button class="act-btn" onclick="initQuote('${ev.id}')">#SHARE <span id="s-repost-${ev.id}">${s.repost}</span></button> <button class="${likeClass} act-btn" onclick="doLike('${ev.id}', '${ev.pubkey}')">#LIKE <span id="s-like-${ev.id}">${s.like}</span></button> <button class="act-btn zap-btn" onclick="handleZap('${p.lud16}', '${ev.pubkey}', '${ev.id}')">#ZAP ⚡ <span id="s-zap-${ev.id}">${zapLabel}</span></button> <button class="${bookmarkClass}" onclick="doBookmark('${ev.id}')">#MARK</button> </div> </div>`; 
         }
         function parseContent(text) { 
             if(!text) return ""; let content = text.replace(/</g, "&lt;").replace(/>/g, "&gt;"); 
