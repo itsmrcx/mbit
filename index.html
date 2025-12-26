@@ -26,6 +26,7 @@
             --fab-text: #000000;
             --quote-bg: #111;
             --base-font-size: 16px; 
+            --menu-bg: #111;
         }
 
         [data-theme="matrix"] {
@@ -41,6 +42,7 @@
             --fab-bg: #00FF41;
             --fab-text: #000000;
             --quote-bg: #001100;
+            --menu-bg: #001100;
         }
 
         [data-theme="light"] {
@@ -59,6 +61,7 @@
             --fab-bg: #000000;
             --fab-text: #ffffff;
             --quote-bg: #f9f9f9;
+            --menu-bg: #fff;
         }
 
         /* GLOBAL STYLES */
@@ -109,12 +112,13 @@
 
         .list-item { padding: 10px; border-bottom: 1px solid var(--post-border); display: flex; align-items: center; gap: 10px; }
         
-        .post { border-left: 2px solid var(--post-border); padding-left: 15px; margin-bottom: 30px; animation: fadeIn 0.5s; }
+        .post { position: relative; border-left: 2px solid var(--post-border); padding-left: 15px; margin-bottom: 30px; animation: fadeIn 0.5s; }
         .thread-parent { border-left: 4px solid var(--text-color); background: rgba(255,255,255,0.05); padding: 15px; margin-bottom: 20px; }
         .thread-ancestor { border-left: 2px dotted var(--meta-color); opacity: 0.85; padding: 10px; margin-bottom: 15px; background: rgba(255,255,255,0.02); }
         .thread-ancestor .actions { display: none; }
         
-        .meta { font-size: 0.75em; opacity: 0.9; margin-bottom: 5px; color: var(--meta-color); display: flex; align-items: center; cursor: pointer; }
+        .post-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px; }
+        .meta { font-size: 0.75em; opacity: 0.9; color: var(--meta-color); display: flex; align-items: center; cursor: pointer; }
         .avatar { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border-color); margin-right: 10px; object-fit: cover; background: #111; }
         .username-link { font-weight: bold; color: var(--text-color); text-decoration: underline; }
         .content { font-size: 1em; line-height: 1.4; word-wrap: break-word; cursor: pointer; }
@@ -125,6 +129,21 @@
         .quote-card { border: 1px solid var(--post-border); background: var(--quote-bg); padding: 10px; margin: 10px 0; border-radius: 5px; font-size: 0.9em; }
         .quote-card .meta { margin-bottom: 5px; border-bottom: 1px dotted var(--post-border); padding-bottom: 5px; }
 
+        /* POST MENU (DOTS) */
+        .more-btn { background: transparent; border: none; color: var(--meta-color); cursor: pointer; padding: 0 5px; font-size: 1.2em; line-height: 1; }
+        .more-btn:hover { color: var(--text-color); }
+        .menu-dropdown { 
+            position: absolute; 
+            top: 25px; right: 0; 
+            background: var(--menu-bg); 
+            border: 1px solid var(--text-color); 
+            z-index: 100; 
+            width: 160px; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5); 
+        }
+        .menu-item { padding: 10px; cursor: pointer; font-size: 0.8em; border-bottom: 1px solid #333; }
+        .menu-item:hover { background: var(--text-color); color: var(--bg-color); }
+
         .profile-card { border: 1px solid var(--text-color); background: var(--input-bg); padding: 15px; margin-bottom: 20px; display: flex; align-items: center; gap: 15px; cursor: pointer; transition: 0.2s; }
         .profile-card:hover { transform: scale(1.02); box-shadow: var(--glow); }
         .profile-card img { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-color); }
@@ -133,7 +152,7 @@
         .profile-card .nip05 { font-size: 0.8em; color: #3498db; }
         .profile-card .about { font-size: 0.8em; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-        /* ACTION BUTTONS */
+        /* ACTION BUTTONS & COUNTERS */
         .actions { 
             margin-top: 15px; 
             font-size: 0.8em; 
@@ -159,19 +178,9 @@
             transition: 0.2s; 
         }
 
-        .act-btn:hover { 
-            transform: scale(1.1);
-            color: var(--text-color); 
-            box-shadow: none;
-        }
-
-        .act-btn svg {
-            width: 20px;
-            height: 20px;
-            stroke-width: 2;
-            fill: none;
-            stroke: currentColor;
-        }
+        .act-btn:hover { transform: scale(1.1); color: var(--text-color); box-shadow: none; }
+        .act-btn svg { width: 20px; height: 20px; stroke-width: 2; fill: none; stroke: currentColor; }
+        .act-btn span { font-size: 0.9em; font-weight: bold; }
 
         .act-btn.active svg { fill: #e0245e; stroke: #e0245e; }
         .act-btn.active { color: #e0245e; }
@@ -180,30 +189,15 @@
         .zap-btn:hover { color: #fff !important; }
         .zap-btn svg { fill: currentColor; stroke: none; }
 
-        /* REACTION PICKER (PILL) STYLE */
+        /* REACTION PICKER (PILL) */
         .reaction-bar {
-            position: fixed;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            background: #222;
-            border: 1px solid var(--text-color);
-            border-radius: 50px;
-            padding: 15px 25px;
-            display: flex; 
-            gap: 15px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.9);
-            z-index: 2500;
-            animation: zoomIn 0.2s;
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: #222; border: 1px solid var(--text-color); border-radius: 50px;
+            padding: 15px 25px; display: flex; gap: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.9); z-index: 2500; animation: zoomIn 0.2s;
         }
-        
         [data-theme="light"] .reaction-bar { background: #fff; box-shadow: 0 5px 20px rgba(0,0,0,0.3); }
-
-        .reaction-emoji { 
-            font-size: 1.8rem; 
-            cursor: pointer; 
-            transition: transform 0.2s; 
-            user-select: none;
-        }
+        .reaction-emoji { font-size: 1.8rem; cursor: pointer; transition: transform 0.2s; user-select: none; }
         .reaction-emoji:hover { transform: scale(1.4); }
 
         #new-btn { width: 100%; padding: 15px; background: var(--btn-bg); color: var(--btn-text); font-weight: bold; text-align: center; cursor: pointer; margin-bottom: 20px; border: 2px solid var(--border-color); animation: pulse 2s infinite; }
@@ -237,21 +231,11 @@
 
         /* FOOTER DISPLAY ALL TIME */
         .sticky-footer { 
-            position: fixed; 
-            bottom: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 60px;
-            background-color: var(--footer-bg); 
-            border-top: 1px solid var(--border-color); 
-            display: flex; 
-            justify-content: center; 
-            align-items: center;
-            gap: 6px; 
-            z-index: 1200;
-            box-shadow: 0 -2px 10px rgba(0,0,0,0.5); 
-            font-family: inherit; 
-            transform: translateZ(0);
+            position: fixed; bottom: 0; left: 0; width: 100%; height: 60px;
+            background-color: var(--footer-bg); border-top: 1px solid var(--border-color); 
+            display: flex; justify-content: center; align-items: center; gap: 6px; 
+            z-index: 1200; box-shadow: 0 -2px 10px rgba(0,0,0,0.5); 
+            font-family: inherit; transform: translateZ(0);
         }
         .footer-item { font-size: 0.85em; cursor: pointer; text-align: center; transition: 0.3s; color: var(--text-color); text-decoration: none; opacity: 0.7; }
         .footer-item:hover { opacity: 1; text-decoration: underline; text-shadow: var(--glow); }
@@ -550,6 +534,10 @@
         
         let filterSettings;
         try { filterSettings = JSON.parse(localStorage.getItem('mbit_filters')) || { hideNsfw: false, blockedTags: [] }; } catch(e) { filterSettings = { hideNsfw: false, blockedTags: [] }; }
+
+        // MUTE LISTS
+        let mutedUsers = new Set(JSON.parse(localStorage.getItem('mbit_muted_users') || '[]'));
+        let mutedNotes = new Set(JSON.parse(localStorage.getItem('mbit_muted_notes') || '[]'));
 
         // NWC SETTINGS
         let nwcString = localStorage.getItem('mbit_nwc') || "";
@@ -1341,7 +1329,14 @@
         function removeFilterTag(tag) { filterSettings.blockedTags = filterSettings.blockedTags.filter(t => t !== tag); saveFilters(); renderFilterList(); }
         function saveFilters() { localStorage.setItem('mbit_filters', JSON.stringify(filterSettings)); if(!document.getElementById('feed-container').classList.contains('hidden')) renderGlobalFeed(); }
         function renderFilterList() { document.getElementById('filter-list').innerHTML = filterSettings.blockedTags.map(tag => `<span class="filter-tag">#${tag} <span class="remove-tag" onclick="removeFilterTag('${tag}')">x</span></span>`).join(''); }
-        function isBlocked(ev) { if (!ev.tags) return false; const evTags = ev.tags.filter(t => t[0] === 't').map(t => t[1].toLowerCase()); if (filterSettings.hideNsfw && evTags.includes('nsfw')) return true; for (let blocked of filterSettings.blockedTags) { if (evTags.includes(blocked)) return true; } return false; }
+        function isBlocked(ev) { 
+            if (mutedUsers.has(ev.pubkey) || mutedNotes.has(ev.id)) return true;
+            if (!ev.tags) return false; 
+            const evTags = ev.tags.filter(t => t[0] === 't').map(t => t[1].toLowerCase()); 
+            if (filterSettings.hideNsfw && evTags.includes('nsfw')) return true; 
+            for (let blocked of filterSettings.blockedTags) { if (evTags.includes(blocked)) return true; } 
+            return false; 
+        }
         
         function doBookmark(id) { if(bookmarks.has(id)) { bookmarks.delete(id); alert("Bookmark Removed"); } else { bookmarks.add(id); alert("Saved to Bookmarks"); } localStorage.setItem('mbit_bookmarks', JSON.stringify([...bookmarks])); }
         function openBookmarks() { togglePanel('panel-bookmarks'); const ids = [...bookmarks]; if(ids.length === 0) { document.getElementById('bookmarks-feed').innerHTML = "No bookmarks yet."; return; } document.getElementById('bookmarks-feed').innerHTML = "Loading saved posts..."; bookmarkEvents = []; Object.values(sockets).forEach(ws => { if(ws.readyState === 1) ws.send(JSON.stringify(["REQ", "bookmarks_sub", { kinds: [1], ids: ids }])); }); }
@@ -1505,6 +1500,73 @@
         }
         /* --- END REACTION LOGIC --- */
 
+        /* --- MUTE LOGIC --- */
+        function togglePostMenu(id) {
+            const menu = document.getElementById('menu-' + id);
+            if (menu) {
+                menu.classList.toggle('hidden');
+                // Close others
+                document.querySelectorAll('.menu-dropdown').forEach(el => {
+                    if (el.id !== 'menu-' + id) el.classList.add('hidden');
+                });
+            }
+        }
+
+        // Close menus when clicking outside
+        window.onclick = function(event) {
+            if (!event.target.matches('.more-btn')) {
+                document.querySelectorAll('.menu-dropdown').forEach(el => el.classList.add('hidden'));
+            }
+        }
+
+        function muteUser(pubkey) {
+            if(confirm("Mute this user? You won't see their posts anymore.")) {
+                mutedUsers.add(pubkey);
+                localStorage.setItem('mbit_muted_users', JSON.stringify([...mutedUsers]));
+                location.reload(); 
+            }
+        }
+
+        function muteNote(id) {
+            if(confirm("Mute this specific note?")) {
+                mutedNotes.add(id);
+                localStorage.setItem('mbit_muted_notes', JSON.stringify([...mutedNotes]));
+                location.reload(); 
+            }
+        }
+        /* --- END MUTE LOGIC --- */
+
+        /* --- COPY NOTE LOGIC --- */
+        function copyNoteLink(id) {
+            try {
+                const encoded = window.NostrTools.nip19.noteEncode(id);
+                const url = `nostr:${encoded}`; // Or a web URL if you prefer
+                navigator.clipboard.writeText(url);
+                alert("Copied Note Link (nostr:note1...)");
+            } catch(e) { console.error(e); alert("Failed to copy link."); }
+        }
+
+        function copyNoteText(id) {
+            const note = events.find(e => e.id === id) || myEvents.find(e => e.id === id) || threadEvents.find(e => e.id === id) || notifEvents.find(e => e.id === id);
+            if (note) {
+                navigator.clipboard.writeText(note.content);
+                alert("Copied Note Text");
+            } else {
+                alert("Note data not found in cache.");
+            }
+        }
+
+        function copyNoteJSON(id) {
+             const note = events.find(e => e.id === id) || myEvents.find(e => e.id === id) || threadEvents.find(e => e.id === id) || notifEvents.find(e => e.id === id);
+             if (note) {
+                 navigator.clipboard.writeText(JSON.stringify(note, null, 2));
+                 alert("Copied Raw JSON");
+             } else {
+                 alert("Note data not found in cache.");
+             }
+        }
+        /* --- END COPY LOGIC --- */
+
         function processEventStats(ev) { 
             if (!ev || !ev.tags) return; 
             const eTags = ev.tags.filter(t => t[0] === 'e'); 
@@ -1558,36 +1620,50 @@
             const likeClass = likedPosts.has(ev.id) ? 'act-btn active' : 'act-btn'; 
             const s = eventStats[ev.id] || { reply:0, repost:0, like:0, zap:0, zapAmount: 0 }; 
             
-            // Format Zap display
+            // Format Zap display: Amount received if > 0, else count if > 0, else empty
             let zapDisplay = "";
             if(s.zapAmount > 0) zapDisplay = formatSats(s.zapAmount);
+            else if (s.zap > 0) zapDisplay = s.zap;
 
             // UPDATED HTML FOR ICONS
             return `
             <div class="post"> 
-                <div class="meta" onclick="viewProfile('${ev.pubkey}')"> 
-                    ${p.picture?`<img src="${p.picture}" class="avatar">`:''} 
-                    <span class="username-link">${p.display_name || p.name || ev.pubkey.substring(0,6)}</span> 
-                    <span style="margin-left:5px; opacity:0.5;">• ${new Date(ev.created_at*1000).toLocaleTimeString()}</span> 
-                </div> 
+                <div class="post-header">
+                    <div class="meta" onclick="viewProfile('${ev.pubkey}')"> 
+                        ${p.picture?`<img src="${p.picture}" class="avatar">`:''} 
+                        <span class="username-link">${p.display_name || p.name || ev.pubkey.substring(0,6)}</span> 
+                        <span style="margin-left:5px; opacity:0.5;">• ${new Date(ev.created_at*1000).toLocaleTimeString()}</span> 
+                    </div> 
+                    <div class="menu-container" style="position:relative;">
+                        <button class="more-btn" onclick="togglePostMenu('${ev.id}')">...</button>
+                        <div id="menu-${ev.id}" class="menu-dropdown hidden">
+                            <div class="menu-item" onclick="copyNoteLink('${ev.id}')">🔗 Copy Link</div>
+                            <div class="menu-item" onclick="copyNoteText('${ev.id}')">📄 Copy Text</div>
+                            <div class="menu-item" onclick="copyNoteJSON('${ev.id}')">⚙️ Copy JSON</div>
+                            <div style="border-top:1px solid #333; margin:5px 0;"></div>
+                            <div class="menu-item" onclick="muteUser('${ev.pubkey}')" style="color:#ff4141">🚫 Mute User</div>
+                            <div class="menu-item" onclick="muteNote('${ev.id}')" style="color:#ff4141">qx Mute Note</div>
+                        </div>
+                    </div>
+                </div>
                 <div class="content" onclick="viewThread('${ev.id}')">${parseContent(content)}</div> 
                 <div class="actions"> 
                     <!-- COMMENT ICON -->
                     <button class="act-btn" onclick="initReply('${ev.id}', '${ev.pubkey}')" title="Comment">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                        <span id="s-reply-${ev.id}">${s.reply || ''}</span>
+                        <span id="s-reply-${ev.id}">${s.reply > 0 ? s.reply : ''}</span>
                     </button> 
                     
                     <!-- SHARE/QUOTE ICON -->
                     <button class="act-btn" onclick="initQuote('${ev.id}')" title="Share/Quote">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"></polyline><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><polyline points="7 23 3 19 7 15"></polyline><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>
-                        <span id="s-repost-${ev.id}">${s.repost || ''}</span>
+                        <span id="s-repost-${ev.id}">${s.repost > 0 ? s.repost : ''}</span>
                     </button> 
                     
                     <!-- SMILEY REACTION PICKER TRIGGER -->
                     <button class="${likeClass} act-btn" onclick="openReactionPicker('${ev.id}', '${ev.pubkey}')" title="React">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
-                        <span id="s-like-${ev.id}">${s.like || ''}</span>
+                        <span id="s-like-${ev.id}">${s.like > 0 ? s.like : ''}</span>
                     </button> 
                     
                     <!-- ZAP ICON -->
