@@ -9,6 +9,48 @@
     <style>
         /* THEME VARIABLES */
         :root {
+            /* Default fallback (Dark) - overridden by JS immediately if needed */
+            --bg-color: #ffffff;
+            --text-color: #000000;
+            --panel-bg: #f5f5f5;
+            --border-color: #000000;
+            --input-bg: #ffffff;
+            --btn-bg: #000000;
+            --btn-text: #ffffff;
+            --meta-color: #444444;
+            --post-border: #cccccc;
+            --glow: 0 0 0px transparent;
+            --reply-indicator: #e0e0e0;
+            --footer-bg: #eeeeee;
+            --tag-bg: #ddd;
+            --fab-bg: #000000;
+            --fab-text: #ffffff;
+            --quote-bg: #f9f9f9;
+            --menu-bg: #fff;
+            --base-font-size: 16px; 
+        }
+
+        [data-theme="matrix"] {
+            --bg-color: #000000;
+            --text-color: #00FF41;
+            --panel-bg: #050505;
+            --border-color: #00FF41;
+            --input-bg: #001100;
+            --btn-bg: #00FF41;
+            --btn-text: #000000;
+            --meta-color: #ccffcc;
+            --post-border: #333;
+            --glow: 0 0 5px #00FF41;
+            --reply-indicator: #002200;
+            --footer-bg: #001100;
+            --tag-bg: #003300;
+            --fab-bg: #00FF41;
+            --fab-text: #000000;
+            --quote-bg: #001100;
+            --menu-bg: #001100;
+        }
+
+        [data-theme="dark"] {
             --bg-color: #000000;
             --text-color: #ffffff;
             --panel-bg: #050505;
@@ -25,27 +67,11 @@
             --fab-bg: #ffffff;
             --fab-text: #000000;
             --quote-bg: #111;
-            --base-font-size: 16px; 
             --menu-bg: #111;
         }
 
-        [data-theme="matrix"] {
-            --text-color: #00FF41;
-            --border-color: #00FF41;
-            --input-bg: #001100;
-            --btn-bg: #00FF41;
-            --meta-color: #ccffcc;
-            --glow: 0 0 5px #00FF41;
-            --reply-indicator: #002200;
-            --footer-bg: #001100;
-            --tag-bg: #003300;
-            --fab-bg: #00FF41;
-            --fab-text: #000000;
-            --quote-bg: #001100;
-            --menu-bg: #001100;
-        }
-
         [data-theme="light"] {
+            /* Explicit light variables */
             --bg-color: #ffffff;
             --text-color: #000000;
             --panel-bg: #f5f5f5;
@@ -113,8 +139,8 @@
         .list-item { padding: 10px; border-bottom: 1px solid var(--post-border); display: flex; align-items: center; gap: 10px; }
         
         .post { position: relative; border-left: 2px solid var(--post-border); padding-left: 15px; margin-bottom: 30px; animation: fadeIn 0.5s; }
-        .thread-parent { border-left: 4px solid var(--text-color); background: rgba(255,255,255,0.05); padding: 15px; margin-bottom: 20px; }
-        .thread-ancestor { border-left: 2px dotted var(--meta-color); opacity: 0.85; padding: 10px; margin-bottom: 15px; background: rgba(255,255,255,0.02); }
+        .thread-parent { border-left: 4px solid var(--text-color); background: rgba(125,125,125,0.1); padding: 15px; margin-bottom: 20px; }
+        .thread-ancestor { border-left: 2px dotted var(--meta-color); opacity: 0.85; padding: 10px; margin-bottom: 15px; background: rgba(125,125,125,0.05); }
         .thread-ancestor .actions { display: none; }
         
         .post-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px; }
@@ -250,7 +276,7 @@
         .notif-tabs { display: flex; border-bottom: 1px solid var(--post-border); margin-bottom: 15px; }
         
         .notif-item { padding: 12px; border-bottom: 1px solid var(--post-border); font-size: 0.9em; display: flex; align-items: center; transition: background 0.2s; }
-        .notif-item:hover { background: rgba(255,255,255,0.05); }
+        .notif-item:hover { background: rgba(125,125,125,0.1); }
         .notif-icon { margin-right: 15px; font-size: 1.5em; width: 25px; text-align: center; }
 
         /* FOOTER DISPLAY ALL TIME */
@@ -368,9 +394,9 @@
             <button onclick="togglePanel('panel-relays')" style="width:100%; margin-bottom:15px; border: 1px solid var(--text-color);">>> MANAGE RELAYS</button>
             <label>SYSTEM THEME:</label>
             <select id="theme-selector" onchange="changeTheme(this.value)">
+                <option value="light">Black on White</option>
                 <option value="dark">White on Black</option>
                 <option value="matrix">Matrix Green</option>
-                <option value="light">Black on White</option>
             </select>
             <br>
             <label>FONT SIZE:</label>
@@ -462,8 +488,8 @@
         <!-- MAIN FEED STUFF -->
         <div id="feed-container">
             <div class="feed-tabs-container">
-                <button id="btn-feed-global" class="feed-tab active" onclick="switchFeed('global')">[ GLOBAL ]</button>
-                <button id="btn-feed-following" class="feed-tab" onclick="switchFeed('following')">[ FOLLOWING ]</button>
+                <button id="btn-feed-global" class="feed-tab active" onclick="switchFeed('global')">#GLOBAL</button>
+                <button id="btn-feed-following" class="feed-tab" onclick="switchFeed('following')">#FOLLOWING</button>
             </div>
             <div id="new-btn" class="hidden" onclick="mergeQueue()">>> LOAD NEW SIGNALS <<</div>
             <div id="feed"></div>
@@ -602,8 +628,9 @@
             if (theme !== 'dark') document.documentElement.setAttribute('data-theme', theme);
             localStorage.setItem('mbit_theme', theme);
         }
-        changeTheme(localStorage.getItem('mbit_theme') || 'matrix');
-        document.getElementById('theme-selector').value = localStorage.getItem('mbit_theme') || 'matrix';
+        // Change DEFAULT theme to 'light' (white)
+        changeTheme(localStorage.getItem('mbit_theme') || 'light');
+        document.getElementById('theme-selector').value = localStorage.getItem('mbit_theme') || 'light';
 
         // Init Font Size
         function changeFontSize(size) {
