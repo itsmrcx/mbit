@@ -154,14 +154,14 @@
         .quote-card .meta { margin-bottom: 5px; border-bottom: 1px dotted var(--post-border); padding-bottom: 5px; }
 
         /* POST MENU (DOTS) */
-        .more-btn { background: transparent; border: none; color: var(--meta-color); cursor: pointer; padding: 0 5px; font-size: 1.2em; line-height: 1; }
+        .more-btn { background: transparent; border: none; color: var(--meta-color); cursor: pointer; padding: 0 5px; font-size: 1.2em; line-height: 1; user-select: none; }
         .more-btn:hover { color: var(--text-color); }
         .menu-dropdown { 
             position: absolute; 
             top: 25px; right: 0; 
             background: var(--menu-bg); 
             border: 1px solid var(--text-color); 
-            z-index: 100; 
+            z-index: 1000; 
             width: 160px; 
             box-shadow: 0 5px 15px rgba(0,0,0,0.5); 
         }
@@ -186,7 +186,7 @@
             width: 100%;
         }
         .profile-actions-row button {
-            border: 1px solid var(--text-color) !important; /* Override no-border */
+            border: 1px solid var(--text-color) !important;
             padding: 12px;
             flex: 1;
             text-align: center;
@@ -205,7 +205,6 @@
             color: var(--bg-color);
             transform: scale(1.02);
         }
-        /* Zap Button in Profile */
         .profile-actions-row .zap-btn {
             border-color: #F7931A !important;
             color: #F7931A !important;
@@ -248,7 +247,6 @@
         .act-btn.active svg { fill: #e0245e; stroke: #e0245e; }
         .act-btn.active { color: #e0245e; }
         
-        /* This is for Feed Zaps */
         .actions .zap-btn { color: #F7931A !important; }
         .actions .zap-btn:hover { color: #fff !important; }
         .actions .zap-btn svg { fill: currentColor; stroke: none; }
@@ -1020,6 +1018,9 @@
             if (currentNotifTab === 'zaps') list = notifEvents.filter(e => e.kind === 9735);
             else if (currentNotifTab === 'mentions') list = notifEvents.filter(e => e.kind === 1);
             
+            // FILTER BLOCKED USERS FROM NOTIFICATIONS
+            list = list.filter(ev => !isBlocked(ev));
+
             if (list.length === 0) { document.getElementById('notifications-feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6;">No notifications found.</div>'; return; }
             
             document.getElementById('notifications-feed').innerHTML = list.map(ev => {
@@ -1221,7 +1222,6 @@
             const npub = window.NostrTools.nip19.npubEncode(pubkey);
             let followBtn = '';
             if (!isMe && myPubKey) {
-                // Simplified class names to avoid feed style conflict, relying on .profile-actions-row CSS
                 followBtn = isFollowing 
                     ? `<button onclick="toggleFollow('${pubkey}')">#UNFOLLOW</button>` 
                     : `<button onclick="toggleFollow('${pubkey}')">#FOLLOW</button>`;
@@ -1479,6 +1479,7 @@
         function removeFilterTag(tag) { filterSettings.blockedTags = filterSettings.blockedTags.filter(t => t !== tag); saveFilters(); renderFilterList(); }
         function saveFilters() { localStorage.setItem('mbit_filters', JSON.stringify(filterSettings)); if(!document.getElementById('feed-container').classList.contains('hidden')) renderGlobalFeed(); }
         function renderFilterList() { document.getElementById('filter-list').innerHTML = filterSettings.blockedTags.map(tag => `<span class="filter-tag">#${tag} <span class="remove-tag" onclick="removeFilterTag('${tag}')">x</span></span>`).join(''); }
+        
         function isBlocked(ev) { 
             if (mutedUsers.has(ev.pubkey) || mutedNotes.has(ev.id)) return true;
             if (!ev.tags) return false; 
@@ -1660,6 +1661,7 @@
                     if (el.id !== 'menu-' + id) el.classList.add('hidden');
                 });
             }
+            if(window.event) window.event.stopPropagation();
         }
 
         // Close menus when clicking outside
@@ -1673,7 +1675,7 @@
             if(confirm("Mute this user? You won't see their posts anymore.")) {
                 mutedUsers.add(pubkey);
                 localStorage.setItem('mbit_muted_users', JSON.stringify([...mutedUsers]));
-                location.reload(); 
+                refreshAllViews();
             }
         }
 
@@ -1681,8 +1683,17 @@
             if(confirm("Mute this specific note?")) {
                 mutedNotes.add(id);
                 localStorage.setItem('mbit_muted_notes', JSON.stringify([...mutedNotes]));
-                location.reload(); 
+                refreshAllViews();
             }
+        }
+
+        // Instant refresh instead of reload
+        function refreshAllViews() {
+            // Re-render visible feeds immediately
+            if(!document.getElementById('feed-container').classList.contains('hidden')) renderGlobalFeed();
+            if(!document.getElementById('panel-user-profile').classList.contains('hidden')) renderUserFeed();
+            if(!document.getElementById('panel-notifications').classList.contains('hidden')) renderNotifications();
+            if(!document.getElementById('panel-thread').classList.contains('hidden') && currentThreadId) viewThread(currentThreadId);
         }
         /* --- END MUTE LOGIC --- */
 
