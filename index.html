@@ -200,6 +200,30 @@
         .reaction-emoji { font-size: 1.8rem; cursor: pointer; transition: transform 0.2s; user-select: none; }
         .reaction-emoji:hover { transform: scale(1.4); }
 
+        /* FEED TABS */
+        .feed-tabs-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--post-border);
+            padding-bottom: 10px;
+        }
+        .feed-tab {
+            background: transparent;
+            border: none;
+            color: var(--meta-color);
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            padding: 5px 10px;
+        }
+        .feed-tab:hover { color: var(--text-color); }
+        .feed-tab.active {
+            color: var(--text-color);
+            border-bottom: 2px solid var(--text-color);
+        }
+
         #new-btn { width: 100%; padding: 15px; background: var(--btn-bg); color: var(--btn-text); font-weight: bold; text-align: center; cursor: pointer; margin-bottom: 20px; border: 2px solid var(--border-color); animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
 
@@ -437,6 +461,10 @@
 
         <!-- MAIN FEED STUFF -->
         <div id="feed-container">
+            <div class="feed-tabs-container">
+                <button id="btn-feed-global" class="feed-tab active" onclick="switchFeed('global')">[ GLOBAL ]</button>
+                <button id="btn-feed-following" class="feed-tab" onclick="switchFeed('following')">[ FOLLOWING ]</button>
+            </div>
             <div id="new-btn" class="hidden" onclick="mergeQueue()">>> LOAD NEW SIGNALS <<</div>
             <div id="feed"></div>
         </div>
@@ -547,6 +575,7 @@
         let events = [], incomingBuffer = [], pendingEvents = []; 
         let myEvents = [], userEvents = [], searchEvents = [], notifEvents = [], threadEvents = [], bookmarkEvents = [], trendingEvents = [];
         let isSearching = false; 
+        let currentFeedType = 'global'; // 'global' or 'following'
         
         let likedPosts = new Set();
         try { likedPosts = new Set(JSON.parse(localStorage.getItem('mbit_likes')) || []); } catch(e){}
@@ -614,6 +643,48 @@
             if (id === 'panel-relays') renderRelays();
             currentViewedProfile = null;
             currentThreadId = null;
+        }
+
+        /* --- FEED SWITCHING LOGIC --- */
+        function switchFeed(type) {
+            if (type === 'following') {
+                if (!myPubKey) return alert("Please Login to view your Following feed.");
+                if (myContacts.size === 0) alert("You are not following anyone yet, or your contact list hasn't loaded.");
+            }
+            
+            currentFeedType = type;
+            document.getElementById('btn-feed-global').classList.toggle('active', type === 'global');
+            document.getElementById('btn-feed-following').classList.toggle('active', type === 'following');
+            
+            // Clear current feed
+            events = [];
+            incomingBuffer = [];
+            pendingEvents = [];
+            processedIds.clear();
+            document.getElementById('feed').innerHTML = '<div style="padding:20px; text-align:center; opacity:0.6">Loading feed...</div>';
+            updateNewButton();
+
+            // Resubscribe based on type
+            Object.values(sockets).forEach(ws => {
+                if(ws.readyState === 1) {
+                    // Close existing subs
+                    ws.send(JSON.stringify(["CLOSE", "g"])); 
+                    ws.send(JSON.stringify(["CLOSE", "feed_following"]));
+
+                    if (type === 'global') {
+                        if (!ws.url.includes('purplepag.es') && !ws.url.includes('trending.relays.land')) {
+                            ws.send(JSON.stringify(["REQ", "g", { kinds:[1,6], limit:40 }]));
+                        }
+                    } else if (type === 'following') {
+                        if (!ws.url.includes('purplepag.es') && !ws.url.includes('trending.relays.land')) {
+                            const authors = [...myContacts];
+                            if(myPubKey) authors.push(myPubKey); // Include self
+                            // Chunk authors if too many? For now send all
+                            ws.send(JSON.stringify(["REQ", "feed_following", { kinds:[1,6], authors: authors, limit:50 }]));
+                        }
+                    }
+                }
+            });
         }
 
         /* --- TRENDING LOGIC --- */
@@ -1214,7 +1285,12 @@
                 const ws = new WebSocket(url); sockets[url] = ws;
                 ws.onopen = () => { 
                     if (!url.includes('purplepag.es') && !url.includes('trending.relays.land')) {
-                         ws.send(JSON.stringify(["REQ", "g", { kinds:[1,6], limit:40 }])); 
+                         // Default to Global on connect, or Following if user prefers (logic in switchFeed)
+                         if(currentFeedType === 'global') ws.send(JSON.stringify(["REQ", "g", { kinds:[1,6], limit:40 }])); 
+                         else if(currentFeedType === 'following' && myContacts.size > 0) {
+                             const authors = [...myContacts, myPubKey];
+                             ws.send(JSON.stringify(["REQ", "feed_following", { kinds:[1,6], authors: authors, limit:50 }])); 
+                         }
                     }
                     if(myPubKey) {
                         fetchProfile(myPubKey);
@@ -1233,7 +1309,7 @@
                         // Both my_followers and user_followers are kind 3 events from OTHER people tagging the user
                         if (subId === 'my_followers' || subId === 'user_followers') processProfileEvent(ev, false); 
                         
-                        if (subId === 'g') handleGlobalEvent(ev);
+                        if (subId === 'g' || subId === 'feed_following') handleGlobalEvent(ev);
                         if (subId === 'sub_me') handleMyEvent(ev);
                         if (subId === 'sub_user') handleUserEvent(ev);
                         if (subId === 'search_sub') handleSearchEvent(ev);
@@ -1547,7 +1623,7 @@
         }
 
         function copyNoteText(id) {
-            const note = events.find(e => e.id === id) || myEvents.find(e => e.id === id) || threadEvents.find(e => e.id === id) || notifEvents.find(e => e.id === id);
+            const note = events.find(e => e.id === id) || myEvents.find(e => e.id === id) || threadEvents.find(e => e.id === id) || notifEvents.find(e => e.id === id) || trendingEvents.find(e => e.id === id);
             if (note) {
                 navigator.clipboard.writeText(note.content);
                 alert("Copied Note Text");
@@ -1557,7 +1633,7 @@
         }
 
         function copyNoteJSON(id) {
-             const note = events.find(e => e.id === id) || myEvents.find(e => e.id === id) || threadEvents.find(e => e.id === id) || notifEvents.find(e => e.id === id);
+             const note = events.find(e => e.id === id) || myEvents.find(e => e.id === id) || threadEvents.find(e => e.id === id) || notifEvents.find(e => e.id === id) || trendingEvents.find(e => e.id === id);
              if (note) {
                  navigator.clipboard.writeText(JSON.stringify(note, null, 2));
                  alert("Copied Raw JSON");
